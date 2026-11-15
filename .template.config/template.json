@@ -10,6 +10,7 @@
   ],
   "symbols": {
     "chatModel": { "type": "parameter", "datatype": "string", "defaultValue": "Qwen3.8-27B-oQ4e-mtp", "replaces": "Qwen3.8-27B-oQ4e-mtp", "description": "Local oMLX chat model ID" },
+    "smallModel": { "type": "parameter", "datatype": "string", "defaultValue": "Qwen2.5-0.5B-Instruct-4bit", "replaces": "Qwen2.5-0.5B-Instruct-4bit", "description": "Preinstalled small local oMLX chat model ID" },
     "speechModel": { "type": "parameter", "datatype": "string", "defaultValue": "Ming-3.0-tts-tiny-4bit", "replaces": "Ming-3.0-tts-tiny-4bit", "description": "Local oMLX speech model ID" },
     "transcriptionModel": { "type": "parameter", "datatype": "string", "defaultValue": "LFM3-Omni-2B-MLX-4bit", "replaces": "LFM3-Omni-2B-MLX-4bit", "description": "Local oMLX transcription model ID" },
     "endpoint": { "type": "parameter", "datatype": "string", "defaultValue": "http://127.0.0.1:8001/v1", "replaces": "http://127.0.0.1:8001/v1", "description": "Trusted local OpenAI-compatible endpoint" }

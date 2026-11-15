@@ -15,7 +15,7 @@ cd my-agent
 printf 'Say hello.\n' | dotnet examples/01-hello-world-chat-stdio.cs
 ```
 
-Run `dotnet new local-agent-poc --help` for `--endpoint`, `--chatModel`, `--speechModel` and `--transcriptionModel`. Values become C# string literals, so use simple trusted values without quotes or backslashes. Only loopback HTTP(S) endpoints are accepted; do not put credentials in endpoint URLs. Select the humorous alternative in `examples/common.cs` by commenting the first agent declaration and uncommenting the second. The local OpenAI-compatible client uses a non-secret dummy key; authentication is not configured.
+Run `dotnet new local-agent-poc --help` for `--endpoint`, `--chatModel`, `--smallModel`, `--speechModel` and `--transcriptionModel`. Values become C# string literals, so use simple trusted values without quotes or backslashes. Only loopback HTTP(S) endpoints are accepted; do not put credentials in endpoint URLs. Select the humorous alternative in `examples/common.cs` by commenting the first agent declaration and uncommenting the second. The local OpenAI-compatible client uses a non-secret dummy key; authentication is not configured.
 
 ## Examples
 
@@ -28,8 +28,16 @@ Run `dotnet new local-agent-poc --help` for `--endpoint`, `--chatModel`, `--spee
 | `03-file-tts-by-prompt.cs output.wav "prompt"` | Generate an answer and synthesize speech |
 | `03-file-tts-by-stdin.cs output.wav` | Same, with prompt on stdin |
 | `03-file-audio-and-tts.cs input.wav output.wav` | Transcribe, answer, synthesize speech |
+| `04-small-summarize.cs` | Summarize text from stdin with a small model |
+| `05-small-rewrite.cs` | Rewrite text from stdin |
+| `06-small-translate.cs` | Translate text from stdin to Spanish |
+| `07-small-keywords.cs` | Extract keywords from stdin |
 
 Run each with `dotnet examples/<name>`; for stdin use `printf 'How do I look?\n' | dotnet examples/03-file-tts-by-stdin.cs reply.wav`. Audio examples overwrite the specified output file. They send content to the local oMLX server; verify its model support and privacy configuration before use.
+
+The small examples default to the preinstalled `Qwen2.5-0.5B-Instruct-4bit` model, configurable with `--smallModel`. The oMLX server must discover that model before use. These examples use Apple MLX; they do **not** establish CPU-only execution, and MLX does not provide a Google TPU backend. Small-model outputs are probabilistic and should be checked: the 0.5B model produced an inaccurate translation during testing. The experimental MXC launcher does not support these examples.
+
+`sh tests/small-model-integration.sh [endpoint] [model]` generates a template and checks that all four examples return responses; it does not validate their accuracy.
 
 ## Security status
 

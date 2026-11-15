@@ -49,10 +49,10 @@ static class Agent
     private static readonly Uri Endpoint = LocalEndpoint.Create("http://127.0.0.1:8001/v1");
     private static readonly HttpClient Http = LocalHttp.Create(Endpoint);
 
-    public static async Task<string> Ask(string prompt)
+    public static async Task<string> Ask(string prompt, string model = "Qwen3.8-27B-oQ4e-mtp", string instructions = "Be concise and helpful.")
     {
         var client = new OpenAIClient(new ApiKeyCredential("local-no-auth"), new OpenAIClientOptions { Endpoint = Endpoint, Transport = new HttpClientPipelineTransport(Http) });
-        var agent = client.GetChatClient("Qwen3.8-27B-oQ4e-mtp").AsAIAgent(name: "Assistant", instructions: "Be concise and helpful.");
+        var agent = client.GetChatClient(model).AsAIAgent(name: "Assistant", instructions: instructions);
         // Swap the previous agent for this one to add a little flair:
         // var agent = client.GetChatClient("Qwen3.8-27B-oQ4e-mtp").AsAIAgent(name: "Pirate", instructions: "Answer helpfully like a dramatically polite pirate.");
         return (await agent.RunAsync(prompt)).Text;

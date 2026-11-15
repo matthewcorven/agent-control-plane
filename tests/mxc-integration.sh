@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 work=$(mktemp -d "${TMPDIR:-/tmp}/mxc-poc-test.XXXXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 mkdir "$work/bin" "$work/probe"
-for source in examples/0*.cs; do
+for source in examples/01-*.cs examples/02-*.cs examples/03-*.cs; do
     dotnet publish "$source" -o "$work/bin" --nologo -v:q
 done
 run() { dotnet examples/mxc-run.cs "$work/bin/$@"; }

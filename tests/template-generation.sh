@@ -7,7 +7,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 dotnet new install "$source_dir" --debug:custom-hive "$work/hive" >/dev/null
 dotnet new local-agent-poc --debug:custom-hive "$work/hive" -o "$work/generated" \
-    --chatModel custom-chat-model --endpoint http://127.0.0.1:8765/v1 >/dev/null
+    --chatModel custom-chat-model --smallModel custom-small-model --endpoint http://127.0.0.1:8765/v1 >/dev/null
 if [ -e "$work/generated/.git" ] || [ -e "$work/generated/.template.config" ]; then
     echo 'Generated output contains template repository metadata' >&2; exit 1
 fi
@@ -19,4 +19,9 @@ done
 if ! grep -Fq 'custom-chat-model' "$work/generated/examples/common.cs"; then
     echo 'Chat model substitution missing in examples/common.cs' >&2; exit 1
 fi
+for source in examples/04-small-summarize.cs examples/05-small-rewrite.cs examples/06-small-translate.cs examples/07-small-keywords.cs; do
+    if ! grep -Fq 'custom-small-model' "$work/generated/$source"; then
+        echo "Small model substitution missing in $source" >&2; exit 1
+    fi
+done
 echo 'Template generation checks passed.'
