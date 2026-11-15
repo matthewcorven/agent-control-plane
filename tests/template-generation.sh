@@ -16,9 +16,11 @@ for source in examples/common.cs examples/mxc-run.cs; do
         echo "Endpoint substitution missing in $source" >&2; exit 1
     fi
 done
-if ! grep -Fq 'custom-chat-model' "$work/generated/examples/common.cs"; then
-    echo 'Chat model substitution missing in examples/common.cs' >&2; exit 1
-fi
+for source in examples/common.cs examples/chess.cs; do
+    if ! grep -Fq 'custom-chat-model' "$work/generated/$source"; then
+        echo "Chat model substitution missing in $source" >&2; exit 1
+    fi
+done
 for source in examples/04-small-summarize.cs examples/05-small-rewrite.cs examples/06-small-translate.cs examples/07-small-keywords.cs; do
     if ! grep -Fq 'custom-small-model' "$work/generated/$source"; then
         echo "Small model substitution missing in $source" >&2; exit 1

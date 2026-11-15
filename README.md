@@ -39,6 +39,14 @@ The small examples default to the preinstalled `Qwen2.5-0.5B-Instruct-4bit` mode
 
 `sh tests/small-model-integration.sh [endpoint] [model]` generates a template and checks that all four examples return responses; it does not validate their accuracy.
 
+## Chess experiment
+
+Run `dotnet examples/chess.cs -- --plies 40` in a terminal; press Escape to stop. The Coordinator is a Harness agent with two A2A background agents hosted in direct child processes. It renders the board with Terminal.Gui and validates each worker-attributed move before applying it. `--headless` prints board updates instead. The limit is 1–200 plies (default 40); model output or delegation failures stop the game rather than inventing a move.
+
+This experiment uses `--chatModel` and `--endpoint`, not `--smallModel`. It requires a model capable of Harness tool calling. Each child listens on a dynamically assigned loopback port without authentication; these processes are **not sandboxed**, and other local processes may reach them. Do not use on an untrusted host. The experiment adjudicates checkmate and stalemate, but not repetition, move-count draws, dead positions, insufficient material or draw agreements. A forcibly terminated coordinator may not get an opportunity to clean up children.
+
+From the generated directory, `dotnet tests/chess-rules.cs` and `dotnet tests/chess-attribution.cs` check deterministic rules and move attribution. `dotnet tests/chess-integration.cs` and `dotnet tests/chess-failure-cleanup.cs` exercise local oMLX and subprocess cleanup. Model-dependent tests can fail when the model does not correctly delegate or return a legal move.
+
 ## Security status
 
 - MXC 1.1.0 is a NuGet SDK with native assets, not a required global CLI. The experimental opt-in launcher runs a published example under macOS Seatbelt, granting access to its explicit input and output paths; startup fails rather than falling back to an unsandboxed process. It preserves stdin and stdout. The normal `dotnet examples/...` commands still run outside containment.
