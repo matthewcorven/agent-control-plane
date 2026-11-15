@@ -33,7 +33,7 @@ Run each with `dotnet examples/<name>`; for stdin use `printf 'How do I look?\n'
 
 ## Security status
 
-- MXC 1.1.0 is a NuGet SDK with native assets, not a required global CLI. `dotnet examples/mxc-probe.cs` exercises a separate macOS process with loopback denied; it does **not** sandbox the examples. A usable integration needs tested filesystem and model-endpoint access policy, and fail-closed launching.
+- MXC 1.1.0 is a NuGet SDK with native assets, not a required global CLI. `dotnet examples/mxc-probe.cs` exercises a separate macOS process with loopback denied; it does **not** sandbox the examples. In a separate macOS experiment, a published MAF chat ran inside Seatbelt and reached oMLX through an MXC port exception using an IPv4-only .NET socket; the default .NET socket failed with permission denied. This experiment is not integrated or a security certification: the port exception is not a destination-filtering proxy, and filesystem restrictions, the other examples, and fail-closed launching still need validation.
 - OpenShell 0.1.8 provides a standalone macOS CLI artifact, but its gateway and sandbox have not been provisioned or tested here. The [official installation](https://docs.nvidia.com/openshell/about/installation) sets up a gateway service; review its effects before installing. Wiring an oMLX endpoint into a sandbox is unresolved. OpenShell's Windows MXC backend is not a macOS integration.
 - A denied-loopback probe cannot establish broad network or filesystem isolation. Do not treat it as certification.
 
