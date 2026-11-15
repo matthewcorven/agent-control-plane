@@ -1,5 +1,8 @@
 #:package Microsoft.Agents.AI.OpenAI@1.28.0
 using System.ClientModel;
+using System.ClientModel.Primitives;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json.Nodes;
 using System.Text;
 using Microsoft.Agents.AI;
@@ -17,11 +20,38 @@ static class LocalEndpoint
     }
 }
 
+static class LocalHttp
+{
+    public static HttpClient Create(Uri endpoint)
+    {
+        var handler = new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false };
+        if (IPAddress.TryParse(endpoint.Host, out var address) && address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            handler.ConnectCallback = async (context, ct) =>
+            {
+                if (!string.Equals(context.DnsEndPoint.Host, endpoint.Host, StringComparison.OrdinalIgnoreCase) || context.DnsEndPoint.Port != endpoint.Port)
+                    throw new HttpRequestException("Requests must stay on the configured local model endpoint.");
+                var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                try
+                {
+                    await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), ct);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch { socket.Dispose(); throw; }
+            };
+        }
+        return new HttpClient(handler) { BaseAddress = endpoint };
+    }
+}
+
 static class Agent
 {
+    private static readonly Uri Endpoint = LocalEndpoint.Create("http://127.0.0.1:8001/v1");
+    private static readonly HttpClient Http = LocalHttp.Create(Endpoint);
+
     public static async Task<string> Ask(string prompt)
     {
-        var client = new OpenAIClient(new ApiKeyCredential("local-no-auth"), new OpenAIClientOptions { Endpoint = LocalEndpoint.Create("http://127.0.0.1:8001/v1") });
+        var client = new OpenAIClient(new ApiKeyCredential("local-no-auth"), new OpenAIClientOptions { Endpoint = Endpoint, Transport = new HttpClientPipelineTransport(Http) });
         var agent = client.GetChatClient("Qwen3.8-27B-oQ4e-mtp").AsAIAgent(name: "Assistant", instructions: "Be concise and helpful.");
         // Swap the previous agent for this one to add a little flair:
         // var agent = client.GetChatClient("Qwen3.8-27B-oQ4e-mtp").AsAIAgent(name: "Pirate", instructions: "Answer helpfully like a dramatically polite pirate.");
@@ -31,7 +61,7 @@ static class Agent
 
 static class Audio
 {
-    private static readonly HttpClient Client = new() { BaseAddress = LocalEndpoint.Create("http://127.0.0.1:8001/v1/") };
+    private static readonly HttpClient Client = LocalHttp.Create(LocalEndpoint.Create("http://127.0.0.1:8001/v1/"));
     public static async Task Speak(string text, string path)
     {
         var payload = new JsonObject { ["model"] = "Ming-3.0-tts-tiny-4bit", ["input"] = text, ["response_format"] = "wav" };
