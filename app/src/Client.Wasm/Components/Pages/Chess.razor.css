@@ -1,0 +1,6 @@
+.chess-board { display: grid; grid-template-columns: repeat(8, 2.75rem); width: fit-content; border: 1px solid #555; }
+.square { display: grid; place-items: center; height: 2.75rem; font-size: 2rem; color: #111; }
+.light { background: #eee4cd; } .dark { background: #a78261; }
+
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+nav { display: flex; flex-wrap: wrap; gap: .5rem; }

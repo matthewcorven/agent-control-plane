@@ -40,3 +40,8 @@ gate.Begin("Black");
 id = gate.Start("Black"); gate.Finish(id, true, reply);
 if (game.TryMove(gate.Complete("e2e4")) || game.Fen != after) throw new Exception("Illegal attributed move changed board");
 Console.WriteLine("Attribution and legality rejection checks passed.");
+
+const string request = "{\"params\":{\"message\":{\"parts\":[{\"text\":\"actual white request\"}]}}}";
+if (ChessTranscript.Text(request, false) != "actual white request" || ChessTranscript.Text(reply, true) != "e2e4" || ChessTranscript.Text("{}", false) is not null)
+    throw new Exception("A2A transcript extraction failed");
+if (!ChessTranscript.Bound(new string('x', 301)).EndsWith("[truncated]", StringComparison.Ordinal)) throw new Exception("Transcript was not bounded");

@@ -65,3 +65,25 @@ sealed class MoveAttribution
         }
     }
 }
+
+// Extract only message text from the actual A2A envelope, never transport metadata.
+static class ChessTranscript
+{
+    public static string Bound(string text) => text.Length <= 300 ? text : text[..300] + "… [truncated]";
+    public static string? Text(string json, bool response)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var message = doc.RootElement.GetProperty(response ? "result" : "params").GetProperty("message");
+            var parts = message.GetProperty("parts");
+            if (parts.ValueKind != JsonValueKind.Array) return null;
+            var texts = new List<string>();
+            foreach (var part in parts.EnumerateArray())
+                if (part.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String && text.GetString() is { Length: > 0 } value)
+                    texts.Add(value);
+            return texts.Count == 0 ? null : string.Join("\n", texts);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException) { return null; }
+    }
+}

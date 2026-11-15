@@ -1,0 +1,14 @@
+@using AGUIWebChat.Contracts.Agents
+<FluentCard Class="document-editor">
+    <h2>Shared document</h2>
+    <FluentTextInput Label="Document title" Value="@Document.Title"
+                     ValueChanged="@(value => ChangeAsync(value ?? "", Document.Text))" />
+    <FluentTextArea Label="Document text" Value="@Document.Text" Rows="8" Style="width:100%"
+                    ValueChanged="@(value => ChangeAsync(Document.Title, value ?? ""))" />
+</FluentCard>
+@code {
+    [Parameter, EditorRequired] public required DocumentState Document { get; set; }
+    [Parameter] public EventCallback<DocumentState> OnChanged { get; set; }
+    private Task ChangeAsync(string title, string text) =>
+        OnChanged.InvokeAsync(new DocumentState { Title = title, Text = text });
+}

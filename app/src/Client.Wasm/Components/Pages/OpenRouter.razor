@@ -1,0 +1,47 @@
+@page "/openrouter"
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<h1>OpenRouter chat</h1>
+<p>This sends your prompt directly from your browser to OpenRouter and the selected provider. Their data policies and charges apply. Use only data you are authorized to share.</p>
+<p>The key is not stored by this application; it is cleared from the form when you send. Browser extensions and developer tools may observe the request.</p>
+<form id="openrouter-form" method="post">
+    <label for="openrouter-model">OpenRouter model ID</label>
+    <input id="openrouter-model" disabled required maxlength="200" autocomplete="off" />
+    <label for="openrouter-key">API key</label>
+    <input id="openrouter-key" type="password" disabled required maxlength="1024" autocomplete="off" />
+    <label for="openrouter-prompt">Prompt</label>
+    <textarea id="openrouter-prompt" disabled required maxlength="4000" rows="5"></textarea>
+    <button id="openrouter-send" type="submit" disabled>Send to OpenRouter</button>
+</form>
+<p role="alert">@_initializationError</p>
+<pre id="openrouter-result" role="status" style="white-space: pre-wrap"></pre>
+
+@code {
+    private IJSObjectReference? _module;
+    private string? _initializationError;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./openrouter-workflow.mjs");
+                await _module.InvokeVoidAsync("initialize");
+            }
+            catch (JSException)
+            {
+                _initializationError = "The browser workflow could not be initialized.";
+                StateHasChanged();
+            }
+        }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try { await _module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

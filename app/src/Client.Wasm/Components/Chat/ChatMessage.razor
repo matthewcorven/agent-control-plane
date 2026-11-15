@@ -1,0 +1,92 @@
+﻿@using AGUIWebChat.Client.Models;
+@using AGUIWebChat.Client.Components.Blocks
+@using Markdig
+@using Markdown.ColorCode
+@using Microsoft.AspNetCore.Components
+
+
+<div class="message @RoleClass">
+
+    @if (!string.IsNullOrWhiteSpace(Message.Reasoning))
+    {
+        <ReasoningBlock Block="@ReasoningBlockModel"
+                        DisplayMode="@ReasoningDisplay" />
+
+    }
+
+    @if (Message.Role == ChatRole.Assistant)
+    {
+        <ChatMonitoring Telemetry="@Message.MonitoringTelemetry"
+                        DisplayMode="@MonitoringDisplay"
+                        Settings="@MonitoringSettings" />
+    }
+
+    @if (Message.Role == ChatRole.Assistant)
+    {
+        <div class="message-content markdown-content">
+            @if (Message.Nodes is { Count: > 0 } nodes)
+            {
+                <RichTextRenderer Nodes="nodes" />
+            }
+            else
+            {
+                @((MarkupString)Markdown.ToHtml(
+                    Message.Content,
+                    MarkdownPipeline))
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Message.StatusMessage))
+            {
+                <p class="message-status" role="status">@Message.StatusMessage</p>
+            }
+
+            @if (Message.IsStreaming)
+            {
+                <span class="streaming-cursor">▋</span>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="message-content">
+            @Message.Content
+        </div>
+    }
+
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required ChatMessageModel Message { get; set; }
+
+    [Parameter]
+    public ReasoningDisplayMode ReasoningDisplay { get; set; }
+
+    [Parameter]
+    public MonitoringDisplayMode MonitoringDisplay { get; set; }
+
+    [Parameter, EditorRequired]
+    public required MonitoringSettings MonitoringSettings { get; set; }
+
+    private string RoleClass =>
+        Message.Role == ChatRole.User
+            ? "user-message"
+            : "assistant-message";
+
+    private ChatBlockModel ReasoningBlockModel => new()
+    {
+        Kind = ChatBlockKind.Reasoning,
+        State = Message.IsStreaming ? ChatBlockState.Streaming : ChatBlockState.Complete,
+        Text = Message.Reasoning ?? string.Empty,
+        DurationMs = Message.ReasoningDurationMs,
+        ChunkCount = Message.ReasoningChunkCount,
+        CharacterCount = Message.ReasoningCharacterCount
+    };
+
+    private static readonly MarkdownPipeline MarkdownPipeline =
+        new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .UseColorCode()
+            .DisableHtml()
+            .Build();
+}

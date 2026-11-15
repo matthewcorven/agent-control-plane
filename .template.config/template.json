@@ -6,7 +6,7 @@
   "shortName": "local-agent-poc",
   "sourceName": "LocalAgentPoc",
   "sources": [
-    { "exclude": [".git/**", ".template.config/**", "**/[Bb]in/**", "**/[Oo]bj/**", "**/*.filelist", "**/*.user", "**/*.lock.json"] }
+    { "exclude": [".git/**", ".template.config/**", "**/[Bb]in/**", "**/[Oo]bj/**", "**/node_modules/**", "**/playwright-report/**", "**/test-results/**", "**/test-results-*/**", "**/.dotnet/**", "**/NuGetScratch/**", "**/node-compile-cache/**", "**/playwright-transform-cache-*/**", "**/.fl*", "**/*.keychain", "**/clr-debug-pipe-*", "**/.env", "**/.env.*", "**/*.filelist", "**/*.user", "**/*.lock.json"] }
   ],
   "symbols": {
     "chatModel": { "type": "parameter", "datatype": "string", "defaultValue": "Qwen3.8-27B-oQ4e-mtp", "replaces": "Qwen3.8-27B-oQ4e-mtp", "description": "Local oMLX chat model ID" },

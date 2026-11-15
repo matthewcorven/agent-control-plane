@@ -1,0 +1,5 @@
+@page "/harness-memory"
+@using AGUIWebChat.Client.Components.Scenarios
+<p>Harness memory is temporary and limited to this individual run. It is not recalled in later messages or after a restart. The model may decide whether to use the memory tools. Do not enter secrets: the existing app may retain chat history and logs. No workspace, web, or skill access is enabled.</p>
+<p>Select a tool-capable model on the Models page.</p>
+<ScenarioShell Route="harness-memory" Title="Harness memory" Description="Ask the assistant to use temporary memory during this run." />

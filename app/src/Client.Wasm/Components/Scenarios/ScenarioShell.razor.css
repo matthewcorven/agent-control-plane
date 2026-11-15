@@ -1,0 +1,12 @@
+.scenario-layout { display: flex; gap: 1rem; align-items: flex-start; }
+.scenario-agent { flex: 1; min-width: 0; }
+.scenario-transcript { overflow-wrap: anywhere; }
+.scenario-layout ::deep .document-editor, .scenario-layout ::deep .plan-checklist { flex: 1; min-width: 0; }
+.scenario-layout ::deep .document-diff { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.scenario-layout ::deep .document-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scenario-layout ::deep .plan-step { display: flex; justify-content: space-between; gap: .5rem; padding: .5rem; }
+.scenario-layout ::deep .catalogue-entry { display: flex; flex-wrap: wrap; gap: .75rem; padding: .5rem; }
+@media (max-width: 700px) {
+    .scenario-layout { flex-direction: column; }
+    .scenario-layout ::deep .document-diff { grid-template-columns: 1fr; }
+}

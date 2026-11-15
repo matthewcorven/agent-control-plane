@@ -1,0 +1,4 @@
+@page "/harness-loop"
+@using AGUIWebChat.Client.Components.Scenarios
+<p>This demonstration checks the exact answer to 6 × 7 and makes at most three Harness iterations. Streamed text can include intermediate incorrect attempts; only an exact final answer of 42 passes. The three-iteration limit is not separately signaled in the UI. The fixed question is a model instruction, not enforced input filtering; do not use this as a general task verifier. Select a tool-capable model on the Models page.</p>
+<ScenarioShell Route="harness-loop" Title="Harness bounded loop" Description="Send a message to start the 6 × 7 demonstration." />

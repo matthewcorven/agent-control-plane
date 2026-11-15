@@ -1,0 +1,37 @@
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Client.Models
+@using AGUIWebChat.Client.Components.Blocks
+@using AGUIWebChat.Contracts.Agents
+@using Microsoft.AspNetCore.Components.AI
+
+<CascadingValue Value="_renderers" IsFixed="true">
+    <BlockRenderer TBlock="ScenarioToolContentBlock" When="@(block => block.Model.InterruptId is null)" Context="block">
+        <ToolBlock Scenario="@block.Model" />
+    </BlockRenderer>
+    <BlockRenderer TBlock="ScenarioToolContentBlock"
+                   When="@(block => block.Model.InterruptId is not null && block.Model.Name != "propose_document_edit")" Context="block">
+        <ApprovalBlock Scenario="@block.Model" IsSubmitting="@IsSubmitting"
+                       OnDecision="@(accepted => OnDecision.InvokeAsync(new ScenarioDecision(block.Model, accepted)))" />
+    </BlockRenderer>
+    <BlockRenderer TBlock="ScenarioToolContentBlock"
+                   When="@(block => block.Model.Name == "propose_document_edit" && block.Model.InterruptId is not null)" Context="block">
+        <UIActionBlock Scenario="@block.Model" CurrentDocument="@Document" IsSubmitting="@IsSubmitting"
+                       OnDecision="@(accepted => OnDecision.InvokeAsync(new ScenarioDecision(block.Model, accepted)))" />
+    </BlockRenderer>
+    @foreach (var tool in Tools)
+    {
+        <div @key="tool.Key">@_renderers.RenderBlock(new ScenarioToolContentBlock(tool))</div>
+    }
+</CascadingValue>
+
+@code {
+    private readonly MessageListContext _renderers = new();
+    [Parameter, EditorRequired] public required IReadOnlyList<ScenarioToolModel> Tools { get; set; }
+    [Parameter, EditorRequired] public required DocumentState Document { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    [Parameter] public EventCallback<ScenarioDecision> OnDecision { get; set; }
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) StateHasChanged();
+    }
+}

@@ -1,0 +1,30 @@
+﻿@* No @rendermode here: the component inherits InteractiveAuto from the Routes root.
+   An explicit InteractiveServer override makes WebAssembly rendering throw
+   NotSupportedException on a later WebAssembly visit. *@
+
+<FluentNav Id="main-menu" Width="260px">
+    <FluentNavItem Href="chat" IconRest="@(new Icons.Regular.Size20.Chat())" IconActive="@(new Icons.Filled.Size20.Chat())">Chat</FluentNavItem>
+    <FluentNavItem Href="models" IconRest="@(new Icons.Regular.Size20.BrainCircuit())" IconActive="@(new Icons.Filled.Size20.BrainCircuit())">Models</FluentNavItem>
+    <FluentNavItem Href="tools">Tools</FluentNavItem>
+    <FluentNavItem Href="approvals">Approvals</FluentNavItem>
+    <FluentNavItem Href="shared-state">Shared state</FluentNavItem>
+    <FluentNavItem Href="predictive-state">Predictive state</FluentNavItem>
+    <FluentNavItem Href="generative-ui">Generative UI</FluentNavItem>
+    <FluentNavItem Href="examples">Text and file examples</FluentNavItem>
+    <FluentNavItem Href="openrouter">OpenRouter</FluentNavItem>
+    <FluentNavItem Href="chess">Chess</FluentNavItem>
+    <FluentNavItem Href="local-protocols">Local protocols</FluentNavItem>
+    <FluentNavItem Href="local-audio">Audio and speech</FluentNavItem>
+    <FluentNavItem Href="reasoning">Reasoning</FluentNavItem>
+    <FluentNavItem Href="harness-assistant">Household assistant</FluentNavItem>
+    <FluentNavItem Href="delegation">Agent delegation</FluentNavItem>
+    <FluentNavItem Href="harness-planning">Harness planning</FluentNavItem>
+    <FluentNavItem Href="harness-loop">Harness loop</FluentNavItem>
+    <FluentNavItem Href="harness-memory">Harness memory</FluentNavItem>
+    <FluentNavItem Href="harness-skills">Harness skills</FluentNavItem>
+    <FluentNavItem Href="harness-files">Approved browser files</FluentNavItem>
+    <FluentNavItem Href="openai-host">OpenAI-compatible host</FluentNavItem>
+</FluentNav>
+
+@code {
+}

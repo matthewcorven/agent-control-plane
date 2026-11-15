@@ -1,0 +1,153 @@
+@using AGUIWebChat.Client.Services
+@using AGUIWebChat.Client.Models
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Client.Components.Blocks
+@using AGUIWebChat.Client.Components.Chat
+@inject BrowserAgUiBridge Bridge
+@inject TelemetryService Telemetry
+@inject ChatSettingsService Settings
+@inject ILogger<ScenarioShell> Logger
+@implements IAsyncDisposable
+
+<section class="scenario-page" data-renderer="@RendererInfo.Name" data-browser="@OperatingSystem.IsBrowser().ToString().ToLowerInvariant()" data-thread="@_session?.Checkpoint.ThreadId" data-resetting="@_resetting.ToString().ToLowerInvariant()">
+    <h1>@Title</h1>
+    <p>@Description</p>
+    @if (_resetting) { <p role="status">Starting a new conversation...</p> }
+    @if (_session is not null && _ready)
+    {
+        <FluentButton OnClick="ResetAsync" Disabled="@_resetting">New conversation</FluentButton>
+        @if (_session.Error is not null)
+        {
+            <p class="scenario-error" role="alert" data-code="@_session.ErrorCode" data-status="@_session.ErrorStatus">@_session.Error</p>
+            @if (_session.RestartRequired) { <p>Start a new conversation and request a fresh proposal.</p> }
+        }
+        <div class="scenario-layout">
+        @if (Route is "shared-state" or "predictive-state")
+        {
+            <DocumentEditor Document="@_session.Document" OnChanged="@_session.ChangeDocumentAsync" />
+        }
+        @if (_session.Plan is { } plan) { <PlanChecklist Plan="@plan" /> }
+        <div class="scenario-agent">
+        <div class="scenario-transcript">
+            @foreach (var item in _session.Checkpoint.Transcript)
+            {
+                <div class="@(item.IsUser ? "user-message" : "assistant-message")" @key="item.Id">
+                    @if (item.IsUser) { <p>@item.Text</p> }
+                    else { <RichTextRenderer Nodes="@MarkdownRichTextParser.Parse(item.Text)" /> }
+                </div>
+            }
+        </div>
+        <ScenarioTranscript Tools="@_session.Checkpoint.Tools" Document="@_session.Document"
+                            IsSubmitting="@_session.IsSending" OnDecision="@DecideAsync" />
+        @if (_session.Checkpoint.Reasoning is { Text.Length: > 0 } run)
+        {
+            <ReasoningBlock Block="@(new ChatBlockModel { Kind = ChatBlockKind.Reasoning, Text = run.Text,
+                ChunkCount = run.ChunkCount, CharacterCount = run.Text.Length,
+                DurationMs = run.DurationMs })" DisplayMode="@Settings.Settings.ReasoningDisplay" />
+        }
+        @if (_session.Metrics is { } metrics)
+        {
+            <div class="scenario-metrics" data-run="@metrics.RunId">
+                <ChatMonitoring Telemetry="@metrics" Settings="@Settings.Settings.Monitoring"
+                                DisplayMode="@Settings.Settings.MonitoringDisplay" />
+            </div>
+        }
+        @if (_session.IsSending)
+        {
+            <p class="scenario-pending" role="status">Fetching agent response...</p>
+            <FluentButton OnClick="@_session.Stop">Stop</FluentButton>
+        }
+        <FluentTextArea @bind-Value="_input" Label="Scenario message" Rows="3"
+                        Disabled="@(_resetting || _session.IsSending || _session.HasPending || _session.RestartRequired)"
+                        ChangeAfterKeyPress="@([KeyPress.For(KeyCode.Enter)])"
+                        OnChangeAfterKeyPress="@(_ => SendAsync())" />
+        <FluentButton Disabled="@(_resetting || _session.IsSending || _session.HasPending || _session.RestartRequired)" OnClick="SendAsync">Send</FluentButton>
+        </div>
+        </div>
+    }
+    else
+    {
+        <p role="@(_initialError is null ? "status" : "alert")">@(_initialError ?? "Connecting to the agent...")</p>
+        @if (_initialError is not null) { <FluentButton OnClick="ResetAsync" Disabled="@_resetting">New conversation</FluentButton> }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public required string Route { get; set; }
+    [Parameter, EditorRequired] public required string Title { get; set; }
+    [Parameter] public string Description { get; set; } = "A live, typed AG-UI scenario.";
+    [SupplyParameterFromQuery] public int? ModelId { get; set; }
+    private ScenarioSession? _session;
+    private string? _input;
+    private bool _ready;
+    private string? _initialError;
+    private bool _disposed;
+    private bool _resetting;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _session = new(Bridge, Telemetry, Logger, Route, action => InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                action();
+                StateHasChanged();
+            }));
+            await _session.InitializeAsync(ModelId, Settings.Settings);
+            await Telemetry.StartAsync();
+            await InvokeAsync(() => { if (!_disposed) { _ready = true; StateHasChanged(); } });
+        }
+        catch (Exception error)
+        {
+            Logger.LogError(error, "Scenario initialization failed.");
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                _initialError = "The conversation could not be restored. Reload or start a new conversation.";
+                StateHasChanged();
+            });
+        }
+        if (!_disposed) await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendAsync()
+    {
+        if (_disposed || _resetting) return;
+        string text = _input ?? "";
+        if (string.IsNullOrWhiteSpace(text)) return;
+        await InvokeAsync(() => { if (!_disposed && !_resetting) { _input = ""; StateHasChanged(); } });
+        await _session!.SendAsync(text, Settings.Settings);
+    }
+    private Task DecideAsync(ScenarioDecision decision) => _session!.DecideAsync(decision.Tool, decision.Approved);
+    private async Task ResetAsync()
+    {
+        if (_disposed || _resetting) return;
+        await InvokeAsync(() => { _resetting = true; StateHasChanged(); });
+        try
+        {
+            await _session!.ResetAsync(ModelId, Settings.Settings);
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                _input = ""; _initialError = null; _ready = true; StateHasChanged();
+            });
+        }
+        catch (Exception error)
+        {
+            Logger.LogError(error, "Scenario reset failed.");
+            await InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                _initialError = "The conversation could not be reset. Reload this page."; _ready = false; StateHasChanged();
+            });
+        }
+        finally { await InvokeAsync(() => { if (!_disposed) { _resetting = false; StateHasChanged(); } }); }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_session is not null) await _session.DisposeAsync();
+    }
+}

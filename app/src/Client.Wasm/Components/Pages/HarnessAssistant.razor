@@ -1,0 +1,4 @@
+@page "/harness-assistant"
+@using AGUIWebChat.Client.Components.Scenarios
+<p>This assistant uses Harness planning and todos and can ask a meal helper synchronously. Unlike the console example, it has no file access and does not start background tasks. Planning is guidance, not authorization. Todo state across runs or restarts is not guaranteed. Select a tool-capable model on the Models page.</p>
+<ScenarioShell Route="harness-assistant" Title="Household assistant" Description="Ask for help with a household task." />

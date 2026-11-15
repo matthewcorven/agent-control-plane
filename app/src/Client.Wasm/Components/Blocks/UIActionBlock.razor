@@ -1,0 +1,70 @@
+@using AGUIWebChat.Client.Models
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Contracts.Agents
+@using AGUIWebChat.Client.Components.Scenarios
+
+@* Fluent confirm card for a proposed UI change (accept/reject diff review). *@
+
+<FluentCard Class="ui-action-block">
+    <div class="ui-action-block-header">
+        <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Informative">UI action</FluentBadge>
+        <span class="ui-action-block-title">@(Block?.Title ?? "Apply this document change?")</span>
+    </div>
+
+    @if (Scenario is not null && CurrentDocument is not null)
+    {
+        <DocumentDiff Current="CurrentDocument" Proposed="@ScenarioToolProjection.ProposedDocument(Scenario)" />
+        <p>@Scenario.Status</p>
+    }
+
+    @if (Scenario?.Approved is not null || Block?.IsResolved == true)
+    {
+        <FluentBadge Appearance="BadgeAppearance.Filled"
+                     Color="@(Accepted == true ? BadgeColor.Success : BadgeColor.Danger)">
+            @(Accepted == true ? "Accepted" : "Rejected")
+        </FluentBadge>
+    }
+    else
+    {
+        <FluentStack Orientation="Orientation.Horizontal" HorizontalGap="8">
+            <FluentButton Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size16.Checkmark())"
+                          OnClick="AcceptAsync"
+                          Disabled="@(IsSubmitting || Scenario?.Decision is not null || Scenario?.Status == "Failed")"
+                          aria-label="Accept change">
+                Accept
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                          OnClick="RejectAsync"
+                          Disabled="@(IsSubmitting || Scenario?.Decision is not null || Scenario?.Status == "Failed")"
+                          aria-label="Reject change">
+                Reject
+            </FluentButton>
+        </FluentStack>
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public ChatBlockModel? Block { get; set; }
+    [Parameter] public ScenarioToolModel? Scenario { get; set; }
+    [Parameter] public DocumentState? CurrentDocument { get; set; }
+    [Parameter] public bool IsSubmitting { get; set; }
+    private bool? Accepted => Scenario?.Approved ?? Block?.Accepted;
+
+    [Parameter]
+    public EventCallback<bool> OnDecision { get; set; }
+
+    private Task AcceptAsync() => DecideAsync(true);
+
+    private Task RejectAsync() => DecideAsync(false);
+
+    private async Task DecideAsync(bool accepted)
+    {
+        if (OnDecision.HasDelegate)
+        {
+            await OnDecision.InvokeAsync(accepted);
+        }
+    }
+}

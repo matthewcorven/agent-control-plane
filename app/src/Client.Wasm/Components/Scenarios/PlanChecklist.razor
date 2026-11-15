@@ -1,0 +1,14 @@
+@using AGUIWebChat.Contracts.Agents
+<FluentCard Class="plan-checklist">
+    <h2>@Plan.Title</h2>
+    @foreach (var step in Plan.Steps)
+    {
+        <div data-step="@step.Id" class="plan-step" @key="step.Id">
+            <FluentCheckbox Value="@(step.Status == "done")" Disabled="true" Label="@step.Title" />
+            <FluentBadge>@step.Status</FluentBadge>
+        </div>
+    }
+</FluentCard>
+@code {
+    [Parameter, EditorRequired] public required PlanResult Plan { get; set; }
+}

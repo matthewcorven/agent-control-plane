@@ -1,0 +1,391 @@
+@page "/chat"
+
+@inject IDialogService DialogService
+@implements IDisposable
+
+@using AGUI.Abstractions
+@using AGUIWebChat.Client.Components.Chat
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Client.Models
+@using AGUIWebChat.Client.Services
+@using ChatRoleModel = AGUIWebChat.Client.Models.ChatRole
+@using Microsoft.Agents.AI
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+
+@inject ChatSettingsService SettingsService
+@inject UiAgentChatService ChatService
+@inject TelemetryService TelemetryService
+@inject AGUIWebChat.Client.Services.AI.AIModelApiClient ModelApi
+@inject ILogger<Chat> Logger
+
+<div class="chat-page" data-renderer="@RendererInfo.Name" data-browser="@OperatingSystem.IsBrowser().ToString().ToLowerInvariant()">
+
+    @* ============================================================
+       Header
+       ============================================================ *@
+    <header>
+        <h1>Chat</h1>
+        <p>Interactive chat interface</p>
+        <fluent-divider />
+        <FluentSelect @key="ChatService.Agent" TOption="int" TValue="int" Label="Conversation model"
+                      @bind-Value="SelectedModelId" Disabled="@(IsSending || Models is null)">
+            <FluentOption TOption="int" TValue="int" Value="0">Server default</FluentOption>
+            @foreach (var model in Models ?? [])
+            {
+                <FluentOption TOption="int" TValue="int" Value="@model.Id">@model.DisplayName</FluentOption>
+            }
+        </FluentSelect>
+        <p>Model changes apply to the next run in this conversation.</p>
+        @if (ModelError is not null)
+        {
+            <p role="alert">@ModelError</p>
+        }
+        <FluentStack Padding="@Padding.Vertical3" HorizontalAlignment="HorizontalAlignment.Left">
+            <FluentButton Appearance="ButtonAppearance.Primary" Style="width:100px"
+                            IconStart="@(new Icons.Regular.Size20.Settings())"
+                            OnClick="OpenSettingsAsync">
+                Settings
+            </FluentButton>
+            <FluentButton Appearance="ButtonAppearance.Outline"
+                          IconStart="@(new Icons.Regular.Size20.ChatAdd())"
+                          OnClick="@ResetChat"
+                          Disabled="@IsSending"
+                          Title="Start a new conversation">
+                New chat
+            </FluentButton>
+        </FluentStack>
+    </header>
+    
+    @* ============================================================
+       Messages
+       ============================================================ *@
+
+    <main class="chat-content">
+        @foreach (var message in Messages)
+        {
+            <ChatMessage Message="@message"
+                         ReasoningDisplay="@Settings.ReasoningDisplay"
+                         MonitoringDisplay="@Settings.MonitoringDisplay"
+                         MonitoringSettings="@Settings.Monitoring" />
+        }
+    </main>
+
+    @* ============================================================
+       Input
+       ============================================================ *@
+
+    <footer class="chat-input-area">
+        <div class="chat-input-container">
+            <FluentTextArea @bind-Value="InputText"
+                            Placeholder="Ask something... (Enter to send, Shift+Enter for new line)"
+                            Rows="4"
+                            Disabled="@IsSending"
+                            Style="width: 100%;"
+                            Class="chat-input"
+                            ChangeAfterKeyPress="@([KeyPress.For(KeyCode.Enter)])"
+                            OnChangeAfterKeyPress="@(_ => SendAsync())" />
+            <FluentButton Size="ButtonSize.Large"
+                          Appearance="ButtonAppearance.Primary"
+                          IconStart="@(new Icons.Regular.Size20.Send())"
+                          Disabled="@IsSending"
+                          OnClick="SendAsync"
+                          Class="send-button">
+                          @(IsSending ? "Sending..." : "Send")
+            </FluentButton>
+            <FluentButton Id="thinking-effort-menu"
+                          Size="ButtonSize.Large"
+                          Appearance="ButtonAppearance.Outline"
+                          Disabled="@IsSending"
+                          Title="Choose thinking effort"
+                          Style="flex: 0 0 auto; white-space: nowrap;">
+                          @Settings.ThinkingEffort ▾
+            </FluentButton>
+            <FluentMenu Trigger="thinking-effort-menu">
+                <FluentMenuList>
+                    @foreach (var effort in Enum.GetValues<ThinkingEffort>())
+                    {
+                        <FluentMenuItem OnClick="@(async e => await SetThinkingEffortAsync(effort))">
+                            @(Settings.ThinkingEffort == effort ? "✓ " : "")@effort
+                        </FluentMenuItem>
+                    }
+                </FluentMenuList>
+            </FluentMenu>
+
+            @if (IsSending)
+            {
+                <FluentButton OnClick="CancelResponse">Stop</FluentButton>
+            }
+
+        </div>
+    </footer>
+</div>
+
+@code
+{
+    private ChatMessageModel? _currentAssistantMessage;
+    private string? InputText;
+    private bool IsSending;
+    private CancellationTokenSource? _sendCancellation;
+    private bool _disposed;
+    private int SelectedModelId;
+    private IReadOnlyList<AGUIWebChat.Contracts.AI.Models.AIModelEditModel>? Models;
+    private string? ModelError;
+
+    private void CancelResponse() => _sendCancellation?.Cancel();
+
+    // =============================================================
+    // Settings
+    // =============================================================
+
+    private ChatSettings Settings =>
+        SettingsService.Settings;
+
+    private async Task SetThinkingEffortAsync(ThinkingEffort effort)
+    {
+        if (IsSending) return;
+
+        Settings.ThinkingEffort = effort;
+        await SettingsService.SaveAsync();
+    }
+
+    // =============================================================
+    // Messages
+    // =============================================================
+
+    private List<ChatMessageModel> Messages { get; } = new();
+
+    // =============================================================
+    // Settings drawer
+    // =============================================================
+
+    private async Task OpenSettingsAsync()
+    {
+        await DialogService.ShowDrawerAsync<ChatSettingsPanel>(options =>
+        {
+            options.Modal = true;
+            options.Alignment = DialogAlignment.End;
+            
+        });
+
+        await SettingsService.SaveAsync();
+    }
+
+    // =============================================================
+    // Send message
+    // =============================================================
+
+    private async Task SendAsync()
+    {
+        if (IsSending ||
+            string.IsNullOrWhiteSpace(InputText))
+        {
+            return;
+        }
+
+        // ---------------------------------------------------------
+        // User message
+        // ---------------------------------------------------------
+
+        var userText = InputText.Trim();
+
+        InputText = string.Empty;
+
+        var userMessage = new ChatMessageModel
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Role = ChatRoleModel.User,
+            Content = userText
+        };
+
+        Messages.Add(userMessage);
+
+        // ---------------------------------------------------------
+        // Assistant message
+        //
+        // We create it immediately because its Content will be
+        // progressively filled by the AG-UI stream.
+        // ---------------------------------------------------------
+
+        var assistantMessage = new ChatMessageModel
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Role = ChatRoleModel.Assistant,
+            Content = string.Empty,
+            IsStreaming = true,
+        };
+
+        _currentAssistantMessage = assistantMessage;
+
+        Messages.Add(assistantMessage);
+
+        // ---------------------------------------------------------
+        // Start streaming
+        // ---------------------------------------------------------
+
+        IsSending = true;
+        _sendCancellation = new CancellationTokenSource();
+
+        await InvokeAsync(StateHasChanged);
+
+        // UIAgent yields a block from the stream only once, when the block
+        // pipeline first emits it. Later fragments arrive as OnChanged
+        // notifications on the same instance, so we must subscribe rather
+        // than rely on the enumerable re-yielding.
+        var assistantBlocks = new List<RichContentBlock>();
+        var blockSubscriptions = new List<ContentBlockChangedSubscription>();
+        string? trailingNote = null;
+
+        void RefreshAssistantContent()
+        {
+            assistantMessage.Content = string.Concat(assistantBlocks.Select(b => b.RawText));
+
+            // The block pipeline parses the accumulated text into structured
+            // nodes; prefer those over re-parsing the Markdown in the view.
+            assistantMessage.Nodes = ChatBlockProjector.CombineNodes(assistantBlocks);
+        }
+
+        try
+        {
+            ChatService.ModelId = SelectedModelId > 0 ? SelectedModelId : null;
+            await foreach (var block in ChatService.SendAsync(userText, Settings, _sendCancellation.Token))
+            {
+                if (block is RichContentBlock rich && rich.Role == Microsoft.Extensions.AI.ChatRole.Assistant)
+                {
+                    if (!assistantBlocks.Contains(rich))
+                    {
+                        assistantBlocks.Add(rich);
+                        blockSubscriptions.Add(rich.OnChanged(() =>
+                        {
+                            _ = InvokeAsync(() =>
+                            {
+                                if (_disposed || !ReferenceEquals(_currentAssistantMessage, assistantMessage)) return;
+                                RefreshAssistantContent();
+                                StateHasChanged();
+                            });
+                        }));
+                    }
+
+                    await InvokeAsync(() =>
+                    {
+                        if (_disposed || !ReferenceEquals(_currentAssistantMessage, assistantMessage)) return;
+                        RefreshAssistantContent();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_sendCancellation.IsCancellationRequested)
+        {
+            trailingNote = "Response stopped.";
+        }
+        catch (Exception)
+        {
+            trailingNote = "Error: The response could not be completed. Please try again.";
+        }
+        finally
+        {
+            // Detach before publishing completion so late block updates cannot change the transcript.
+            foreach (var subscription in blockSubscriptions)
+            {
+                subscription.Dispose();
+            }
+
+            assistantMessage.StatusMessage = trailingNote;
+
+            assistantMessage.IsStreaming = false;
+            IsSending = false;
+            _sendCancellation.Dispose();
+            _sendCancellation = null;
+
+            if (!_disposed) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        ChatService.RunChanged += OnRunChanged;
+        TelemetryService.ReasoningCompleted += OnReasoningCompleted;
+        TelemetryService.LlmMetricsCompleted += OnLlmMetricsCompleted;
+
+        await TelemetryService.StartAsync();
+        try
+        {
+            Models = await ModelApi.GetModelsAsync(enabledOnly: true);
+        }
+        catch (HttpRequestException error)
+        {
+            Logger.LogWarning(error, "Conversation model catalogue could not be loaded");
+            ModelError = "Models could not be loaded. The server default remains available.";
+            Models = [];
+        }
+    }
+
+    private void OnReasoningCompleted(ReasoningTelemetryDto telemetry)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            var message = ChatMessageModel.FindForTelemetry(Messages, _currentAssistantMessage,
+                ChatService.ActiveRunId, telemetry.RunId);
+            if (message is null) return;
+            message.ReasoningDurationMs = telemetry.DurationMs;
+            message.ReasoningChunkCount = telemetry.ChunkCount;
+            message.ReasoningCharacterCount = telemetry.CharacterCount;
+            StateHasChanged();
+        });
+    }
+
+    private void OnLlmMetricsCompleted(LlmTelemetryDto telemetry)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            var message = ChatMessageModel.FindForTelemetry(Messages, _currentAssistantMessage,
+                ChatService.ActiveRunId, telemetry.RunId);
+            if (message is null) return;
+            message.MonitoringTelemetry = telemetry;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _sendCancellation?.Cancel();
+        ChatService.RunChanged -= OnRunChanged;
+        TelemetryService.ReasoningCompleted -= OnReasoningCompleted;
+        TelemetryService.LlmMetricsCompleted -= OnLlmMetricsCompleted;
+    }
+
+    private void OnRunChanged(ChatRunSnapshot snapshot)
+    {
+        var message = _currentAssistantMessage;
+        if (message is null) return;
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed || !ReferenceEquals(_currentAssistantMessage, message)) return;
+            message.RunId = snapshot.RunId;
+            message.Reasoning = snapshot.Reasoning;
+            if (message.ReasoningCharacterCount is null)
+            {
+                message.ReasoningChunkCount = snapshot.ReasoningChunkCount;
+                message.ReasoningDurationMs = snapshot.ReasoningDurationMs;
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void ResetChat()
+    {
+        if (IsSending)
+        {
+            return;
+        }
+
+        SelectedModelId = 0;
+        ChatService.Reset();
+        Messages.Clear();
+        _currentAssistantMessage = null;
+    }
+}

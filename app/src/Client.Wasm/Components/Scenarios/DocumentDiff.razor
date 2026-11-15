@@ -1,0 +1,15 @@
+@using AGUIWebChat.Contracts.Agents
+<div class="document-diff">
+    <FluentCard>
+        <h3>Current: @Current.Title</h3>
+        <div class="current-text document-text">@Current.Text</div>
+    </FluentCard>
+    <FluentCard>
+        <h3>Proposed: @Proposed.Title</h3>
+        <div class="proposed-text document-text">@Proposed.Text</div>
+    </FluentCard>
+</div>
+@code {
+    [Parameter, EditorRequired] public required DocumentState Current { get; set; }
+    [Parameter, EditorRequired] public required DocumentState Proposed { get; set; }
+}

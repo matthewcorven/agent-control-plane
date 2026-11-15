@@ -1,0 +1,86 @@
+@using Microsoft.AspNetCore.Components.AI
+
+@* Renders a structured RichTextNode tree with Fluent UI typography. *@
+
+@foreach (var node in Nodes)
+{
+    @RenderNode(node)
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required IReadOnlyList<RichTextNode> Nodes { get; set; }
+
+    private RenderFragment RenderNode(RichTextNode node) => node switch
+    {
+        HeadingNode heading => BuildHeading(heading),
+        ParagraphNode paragraph => BuildParagraph(paragraph),
+        ListNode list => BuildList(list),
+        ListItemNode item => BuildListItem(item),
+        BlockQuoteNode quote => BuildQuote(quote),
+        CodeBlockNode code => BuildCodeBlock(code),
+        TableNode table => BuildTable(table),
+        TableRowNode row => BuildTableRow(row),
+        TableCellNode cell => BuildTableCell(cell),
+        ThematicBreakNode => @<hr class="rt-break" />,
+        TextNode text => @<span>@text.Text</span>,
+        EmphasisNode emphasis => @<em><RichTextRenderer Nodes="emphasis.Children" /></em>,
+        StrongNode strong => @<strong><RichTextRenderer Nodes="strong.Children" /></strong>,
+        StrikethroughNode strike => @<del><RichTextRenderer Nodes="strike.Children" /></del>,
+        InlineCodeNode inlineCode => BuildInlineCode(inlineCode),
+        LinkNode link => BuildLink(link),
+        ImageNode image => BuildImage(image),
+        LineBreakNode => @<br />,
+        HtmlNode html => @<span>@html.Value</span>,
+        _ => @<RichTextRenderer Nodes="node.Children" />
+    };
+
+    private RenderFragment BuildHeading(HeadingNode heading) => heading.Level switch
+    {
+        1 => @<h1 class="rt-h1"><RichTextRenderer Nodes="heading.Children" /></h1>,
+        2 => @<h2 class="rt-h2"><RichTextRenderer Nodes="heading.Children" /></h2>,
+        3 => @<h3 class="rt-h3"><RichTextRenderer Nodes="heading.Children" /></h3>,
+        4 => @<h4 class="rt-h4"><RichTextRenderer Nodes="heading.Children" /></h4>,
+        5 => @<h5 class="rt-h5"><RichTextRenderer Nodes="heading.Children" /></h5>,
+        _ => @<h6 class="rt-h6"><RichTextRenderer Nodes="heading.Children" /></h6>
+    };
+
+    private RenderFragment BuildParagraph(ParagraphNode paragraph) => @<p class="rt-p"><RichTextRenderer Nodes="paragraph.Children" /></p>;
+
+    private RenderFragment BuildList(ListNode list) => list.Ordered
+        ? @<ol class="rt-list" start="@list.Start"><RichTextRenderer Nodes="list.Children" /></ol>
+        : @<ul class="rt-list"><RichTextRenderer Nodes="list.Children" /></ul>;
+
+    private RenderFragment BuildListItem(ListItemNode item) => item.Checked is null
+        ? @<li class="rt-li"><RichTextRenderer Nodes="item.Children" /></li>
+        : @<li class="rt-li rt-task">
+            <FluentCheckbox ReadOnly="true" Value="@item.Checked.Value" />
+            <span class="rt-task-text"><RichTextRenderer Nodes="item.Children" /></span>
+        </li>;
+
+    private RenderFragment BuildQuote(BlockQuoteNode quote) => @<blockquote class="rt-quote"><RichTextRenderer Nodes="quote.Children" /></blockquote>;
+
+    private RenderFragment BuildCodeBlock(CodeBlockNode codeBlock) => @<FluentCard Class="rt-code-card">
+        @if (!string.IsNullOrEmpty(codeBlock.Language))
+        {
+            <FluentBadge Appearance="BadgeAppearance.Tint" Class="rt-code-lang">@codeBlock.Language</FluentBadge>
+        }
+        <pre class="rt-code"><span class="rt-code-text">@codeBlock.Code</span></pre>
+    </FluentCard>;
+
+    private RenderFragment BuildInlineCode(InlineCodeNode inlineCode) => @<span class="rt-inline-code">@inlineCode.Code</span>;
+
+    private RenderFragment BuildTable(TableNode table) => @<FluentCard Class="rt-table-card">
+        <table class="rt-table">
+            <RichTextRenderer Nodes="table.Children" />
+        </table>
+    </FluentCard>;
+
+    private RenderFragment BuildTableRow(TableRowNode row) => @<tr><RichTextRenderer Nodes="row.Children" /></tr>;
+
+    private RenderFragment BuildTableCell(TableCellNode cell) => @<td><RichTextRenderer Nodes="cell.Children" /></td>;
+
+    private RenderFragment BuildLink(LinkNode link) => @<a class="rt-link" href="@link.Url" title="@link.Title" target="_blank" rel="noopener noreferrer"><RichTextRenderer Nodes="link.Children" /></a>;
+
+    private RenderFragment BuildImage(ImageNode image) => @<img class="rt-image" src="@image.Url" alt="@image.Alt" title="@image.Title" />;
+}

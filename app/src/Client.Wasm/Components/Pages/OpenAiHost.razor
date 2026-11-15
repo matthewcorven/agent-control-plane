@@ -1,0 +1,6 @@
+@page "/openai-host"
+
+<h1>OpenAI-compatible development host</h1>
+<p>The separate local host exposes Harness through Chat Completions and Responses. Start oMLX first, then run this from the repository root:</p>
+<pre>DOTNET_ENVIRONMENT=Development dotnet run --project app/src/OpenAIHost/OpenAIHost.csproj -- --development-loopback</pre>
+<p>Use <code>http://127.0.0.1:5079/v1</code> and model <code>harness</code>. The host is unauthenticated: any local process can use it. Do not proxy it or expose it remotely. This page does not start the host.</p>

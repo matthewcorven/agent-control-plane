@@ -1,0 +1,159 @@
+@page "/local-audio"
+@using AGUIWebChat.Client.Services
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Middleware
+@using Microsoft.AspNetCore.Components.AI
+@inject IConfiguration Configuration
+@inject BrowserAgUiBridge Bridge
+@inject TelemetryService Telemetry
+@inject IAgUiSseEventLogger EventLogger
+@inject ChatSettingsService Settings
+@implements IDisposable
+
+<PageTitle>Audio and speech</PageTitle>
+<h1>Audio and speech</h1>
+<p>WAV transcription and speech generation use the configured local model server. Asking the chat agent uses the server-default chat model, which may be external. Content travels through the app server; do not submit sensitive content on an untrusted network.</p>
+<h2>Transcribe audio</h2>
+<label for="audio-file">WAV audio, maximum 10 MiB</label>
+<InputFile id="audio-file" accept="audio/wav,.wav" OnChange="SelectFile" />
+<button type="button" disabled="@(busy || selected is null)" @onclick="Transcribe">Transcribe</button>
+<h2>Ask the chat agent</h2>
+<label for="agent-prompt">Prompt or transcript (maximum 4,000 characters)</label>
+<textarea id="agent-prompt" rows="5" maxlength="4000" @bind="prompt" disabled="@busy"></textarea>
+<button type="button" disabled="@busy" @onclick="AskAgent">Ask agent</button>
+@if (answer is not null)
+{
+    <h3>Agent response</h3>
+    <p id="agent-response" style="white-space: pre-wrap">@answer</p>
+    <button type="button" disabled="@busy" @onclick="UseAnswer">Use response for speech</button>
+}
+<h2>Generate speech</h2>
+<label for="speech-text">Text to speak (maximum 4,000 characters)</label>
+<textarea id="speech-text" rows="6" maxlength="4000" @bind="text"></textarea>
+<button type="button" disabled="@busy" @onclick="Speak">Generate WAV</button>
+@if (busy) { <p role="status">Working…</p> }
+@if (error is not null) { <p role="alert">@error</p> }
+@if (audioUrl is not null)
+{
+    <h2>Generated audio</h2>
+    <audio controls src="@audioUrl">Your browser does not support audio playback.</audio>
+    <a href="@audioUrl" download="speech.wav">Download WAV</a>
+}
+
+@code {
+    private const int MaxBytes = 10 * 1024 * 1024;
+    private IBrowserFile? selected;
+    private string prompt = "";
+    private string text = "";
+    private string? answer;
+    private UiAgentChatService? agent;
+    private CancellationTokenSource? agentCancellation;
+    private bool disposed;
+    private string? audioUrl;
+    private string? error;
+    private bool busy;
+    private HttpClient? client;
+
+    protected override void OnInitialized()
+    {
+        client = new HttpClient { BaseAddress = new Uri((Configuration["AGUI_SERVER_URL"] ?? "http://localhost:5100").TrimEnd('/') + "/") };
+        agent = new UiAgentChatService(Bridge, Telemetry, EventLogger);
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Settings.InitializeAsync();
+    }
+    private void SelectFile(InputFileChangeEventArgs args) { selected = args.File; error = null; }
+    private async Task Transcribe()
+    {
+        if (selected is null) return;
+        busy = true; error = null;
+        try
+        {
+            if (selected.Size == 0 || selected.Size > MaxBytes || !selected.Name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Choose a WAV file between 1 byte and 10 MiB.");
+            using var content = new StreamContent(selected.OpenReadStream(MaxBytes));
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("audio/wav");
+            using var response = await client!.PostAsync("api/local-audio/transcribe", content);
+            if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Transcription failed (HTTP {(int)response.StatusCode}). Check the local model server and file.");
+            var result = await response.Content.ReadFromJsonAsync<Transcript>();
+            prompt = result?.Text ?? throw new InvalidOperationException("The server returned no transcript.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidOperationException or TaskCanceledException) { error = ex.Message; }
+        finally { busy = false; }
+    }
+    private async Task AskAgent()
+    {
+        if (busy) return;
+        error = null;
+        if (string.IsNullOrWhiteSpace(prompt) || prompt.Length > 4000)
+        {
+            error = "Enter a prompt of 1–4000 characters.";
+            return;
+        }
+        busy = true;
+        answer = null;
+        var blocks = new List<RichContentBlock>();
+        var subscriptions = new List<ContentBlockChangedSubscription>();
+        agentCancellation = new CancellationTokenSource();
+        try
+        {
+            // Each request is a fresh conversation, matching the standalone examples.
+            agent!.Reset();
+            await foreach (var block in agent.SendAsync(prompt.Trim(), Settings.Settings, agentCancellation.Token))
+            {
+                if (block is RichContentBlock rich && rich.Role == Microsoft.Extensions.AI.ChatRole.Assistant && !blocks.Contains(rich))
+                {
+                    blocks.Add(rich);
+                    subscriptions.Add(rich.OnChanged(() => { }));
+                }
+            }
+            var response = string.Concat(blocks.Select(block => block.RawText));
+            if (string.IsNullOrWhiteSpace(response)) throw new InvalidOperationException("The agent returned no text response.");
+            answer = response;
+        }
+        catch (Exception) when (disposed) { }
+        catch (Exception) when (!disposed)
+        {
+            error = "The agent response could not be completed. Check the chat model and try again.";
+        }
+        finally
+        {
+            foreach (var subscription in subscriptions) subscription.Dispose();
+            agentCancellation.Dispose();
+            agentCancellation = null;
+            busy = false;
+        }
+    }
+    private void UseAnswer()
+    {
+        if (answer is null) return;
+        if (answer.Length > 4000) { error = "The response exceeds the 4,000-character speech limit; shorten it before speaking."; }
+        else error = null;
+        text = answer;
+        audioUrl = null;
+    }
+    private async Task Speak()
+    {
+        busy = true; error = null; audioUrl = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(text) || text.Length > 4000) throw new InvalidOperationException("Enter 1–4000 characters of text.");
+            using var response = await client!.PostAsJsonAsync("api/local-audio/speech", new { text });
+            if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Speech generation failed (HTTP {(int)response.StatusCode}). Check the local model server.");
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            if (bytes.Length > MaxBytes) throw new InvalidOperationException("Generated audio exceeds 10 MiB.");
+            audioUrl = "data:audio/wav;base64," + Convert.ToBase64String(bytes);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidOperationException or TaskCanceledException) { error = ex.Message; }
+        finally { busy = false; }
+    }
+    public void Dispose()
+    {
+        disposed = true;
+        agentCancellation?.Cancel();
+        agent?.Dispose();
+        client?.Dispose();
+    }
+    private sealed record Transcript(string? Text);
+}

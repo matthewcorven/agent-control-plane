@@ -1,0 +1,33 @@
+@page "/spike-ai"
+@using Microsoft.AspNetCore.Components.AI
+@using Microsoft.Extensions.AI
+
+
+@* THROWAWAY SPIKE PAGE (#3). Not linked from NavMenu. Used to prove that
+   Microsoft.AspNetCore.Components.AI (UIAgent/ChatPage) constructs, renders and
+   streams in BOTH the InteractiveAuto server-circuit phase and the WASM phase. *@
+
+<div class="spike-ai">
+    <h3>Components.AI spike</h3>
+    <p id="spike-phase">phase: <strong id="spike-phase-value">@Phase</strong></p>
+    
+    <ChatPage Agent="@_agent" Placeholder="Ask the spike agent…" />
+
+</div>
+
+@code {
+    private UIAgent? _agent;
+
+    // Probe marker: "wasm" means Blazor's WASM runtime booted and took over the page;
+    // "server" means only the InteractiveAuto server-circuit phase rendered.
+    private string Phase => OperatingSystem.IsBrowser() ? "wasm" : "server";
+
+    protected override void OnInitialized()
+    {
+        IChatClient chatClient = new SpikeEchoChatClient();
+        _agent = new UIAgent(chatClient, options =>
+        {
+            options.ChatOptions = new ChatOptions { Instructions = "Spike agent." };
+        });
+    }
+}

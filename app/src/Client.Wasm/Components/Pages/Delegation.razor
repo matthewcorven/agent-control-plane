@@ -1,0 +1,104 @@
+@page "/delegation"
+@using System.Text.Json
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Agent delegation</PageTitle>
+<div class="delegation-page" data-renderer="@RendererInfo.Name" data-browser="@OperatingSystem.IsBrowser().ToString().ToLowerInvariant()">
+<h1>Agent delegation</h1>
+<p>A coordinator may ask up to three real Harness specialists for help. The model decides whether to delegate; there may be no specialists. This shows submitted prompts and final responses, not internal tool messages. Runs are held in memory for 15 minutes, limited to two minutes, and use the configured model, which may be external.</p>
+<label for="delegation-prompt">Task</label>
+<textarea id="delegation-prompt" maxlength="4000" @bind="prompt"></textarea>
+<button disabled="@(busy || state?.Status == "running")" @onclick="Start">Start</button>
+<button disabled="@(busy || state?.Status != "running")" @onclick="Cancel">Cancel</button>
+@if (error is not null) { <p role="alert">@error</p> }
+@if (state is not null)
+{
+    <p role="status">Run: @state.Status</p>
+    <nav aria-label="Agent sessions">
+        @foreach (var actor in state.Actors)
+        {
+            <button @onclick="() => selected = actor.Id">@actor.Name — @actor.Status</button>
+        }
+    </nav>
+    @if (state.Actors.FirstOrDefault(a => a.Id == selected) is { } current)
+    {
+        <h2>@current.Name — @current.Status</h2>
+        @foreach (var message in current.Messages)
+        {
+            <h3>@message.Role</h3>
+            <p style="white-space: pre-wrap">@message.Text</p>
+        }
+    }
+}
+</div>
+@code {
+    private sealed record Message(string Role, string Text);
+    private sealed record Actor(string Id, string Name, string Status, List<Message> Messages);
+    private sealed record Snapshot(string Status, List<Actor> Actors);
+    private IJSObjectReference? module;
+    private readonly CancellationTokenSource stopping = new();
+    private Task? polling;
+    private Snapshot? state;
+    private int runId;
+    private string? error;
+    private string prompt = "", selected = "coordinator";
+    private bool busy;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { module = await JS.InvokeAsync<IJSObjectReference>("import", "./delegation-transport.js"); }
+        catch (JSException) { error = "Unable to initialize delegation transport."; StateHasChanged(); }
+    }
+    private async Task Start()
+    {
+        busy = true; error = null;
+        try
+        {
+            if (module is null) throw new InvalidOperationException();
+            if (runId != 0) await module.InvokeVoidAsync("release", runId, false);
+            runId = await module.InvokeAsync<int>("create");
+            await module.InvokeVoidAsync("start", runId, prompt);
+            selected = "coordinator";
+            await Refresh();
+            polling = Poll();
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or OperationCanceledException) { error = "Unable to start delegation."; }
+        finally { busy = false; }
+    }
+    private async Task Poll()
+    {
+        try { while (!stopping.IsCancellationRequested && state?.Status == "running") { await Task.Delay(500, stopping.Token); await InvokeAsync(Refresh); } }
+        catch (OperationCanceledException) { }
+        catch (JSException) { error = "Unable to refresh this run."; await InvokeAsync(StateHasChanged); }
+    }
+    private async Task Refresh()
+    {
+        if (module is null) return;
+        int length = await module.InvokeAsync<int>("refresh", runId);
+        if (length > 512 * 1024) throw new InvalidOperationException();
+        var json = new System.Text.StringBuilder(length);
+        while (json.Length < length) json.Append(await module.InvokeAsync<string>("read", runId, json.Length));
+        state = JsonSerializer.Deserialize<Snapshot>(json.ToString(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        StateHasChanged();
+    }
+    private async Task Cancel()
+    {
+        busy = true;
+        try { if (module is not null) { await module.InvokeVoidAsync("cancel", runId); await Refresh(); } }
+        catch (JSException) { error = "Unable to cancel this run."; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        stopping.Cancel();
+        if (polling is not null) await polling;
+        if (module is not null)
+        {
+            try { if (runId != 0) await module.InvokeVoidAsync("release", runId, true); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+        }
+        stopping.Dispose();
+    }
+}

@@ -1,3 +1,17 @@
 bin/
 obj/
 *.wav
+app/node_modules/
+app/playwright-report/
+app/test-results/
+app/.env
+app/.env.*
+app/.dotnet/
+app/NuGetScratch/
+app/.fl*
+app/*.keychain
+app/test-results-*/
+app/node-compile-cache/
+app/playwright-transform-cache-*/
+app/src/Client/Logs/
+app/src/Server/Logs/

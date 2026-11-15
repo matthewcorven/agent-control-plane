@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../../src/Client.Wasm/AGUIWebChat.Client.Wasm.csproj" />
+    <ProjectReference Include="../../src/Client/AGUIWebChat.Client.csproj" />
+    <ProjectReference Include="../../src/Server/AGUIWebChat.Server.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="bunit" Version="2.13.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="11.0.0-rc.3.26522.148" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Common" Version="11.0.0-rc.2.26504.105" />
+    <PackageReference Include="Microsoft.Extensions.Validation" Version="11.0.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="11.0.0-rc.3.26522.148" />
+  </ItemGroup>
+</Project>

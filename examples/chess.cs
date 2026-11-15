@@ -13,6 +13,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using A2A;
 using A2A.AspNetCore;
 using ChessDotNet;
@@ -78,16 +79,28 @@ static class Worker
     }
 }
 
-sealed class A2AMonitor(Uri white, Uri black, MoveAttribution attribution) : DelegatingHandler(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false })
+sealed class A2AMonitor(Uri white, Uri black, MoveAttribution attribution, Action<string, string>? status = null, Action<string, string, string>? transcript = null) : DelegatingHandler(new HttpClientHandler { UseProxy = false, AllowAutoRedirect = false })
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         string? color = request.Method == HttpMethod.Post && request.RequestUri == white ? "White" :
             request.Method == HttpMethod.Post && request.RequestUri == black ? "Black" : null;
         int turn = color is null ? 0 : attribution.Start(color);
+        if (color is not null)
+        {
+            status?.Invoke(color, "A2A request sent");
+            if (request.Content is not null && ChessTranscript.Text(await request.Content.ReadAsStringAsync(cancellationToken), false) is { } text)
+                transcript?.Invoke(color, "Request", text);
+        }
         var response = await base.SendAsync(request, cancellationToken);
         if (color is not null)
-            attribution.Finish(turn, response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
+            {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            attribution.Finish(turn, response.IsSuccessStatusCode, body);
+            if (response.IsSuccessStatusCode && ChessTranscript.Text(body, true) is { } text)
+                transcript?.Invoke(color, "Response", text);
+            status?.Invoke(color, response.IsSuccessStatusCode ? "A2A response received" : "A2A request failed");
+        }
         return response;
     }
 }
@@ -96,7 +109,12 @@ static class ChessApp
 {
     public static async Task Run(string[] args)
     {
-        bool headless = args.Contains("--headless", StringComparer.Ordinal);
+        bool json = args.Contains("--json", StringComparer.Ordinal);
+        bool headless = json || args.Contains("--headless", StringComparer.Ordinal);
+        void Event(string kind, string? fen = null, string? actor = null, string? status = null, string? text = null)
+        {
+            if (json) Console.WriteLine(JsonSerializer.Serialize(new { kind, fen, actor, status, text }));
+        }
         int maxMoves = 40;
         var maxArg = Array.IndexOf(args, "--plies");
         if (maxArg >= 0 && (maxArg + 1 >= args.Length || !int.TryParse(args[maxArg + 1], out maxMoves) || maxMoves is < 1 or > 200))
@@ -106,17 +124,21 @@ static class ChessApp
         var children = new List<Process>();
         try
         {
+            Event("status", actor: "Coordinator", status: "Starting workers");
             var white = await StartChild("White", children, stop.Token);
+            Event("status", actor: "White", status: $"Worker ready (pid {children[^1].Id})");
             var black = await StartChild("Black", children, stop.Token);
+            Event("status", actor: "Black", status: $"Worker ready (pid {children[^1].Id})");
+            void Transcript(string actor, string direction, string text) => Event("transcript", actor: actor, status: direction, text: ChessTranscript.Bound(text));
             var attribution = new MoveAttribution();
-            var monitor = new A2AMonitor(white, black, attribution);
+            var monitor = new A2AMonitor(white, black, attribution, (actor, status) => Event("status", actor: actor, status: status), Transcript);
             using var http = new HttpClient(monitor) { Timeout = TimeSpan.FromSeconds(90) };
             AIAgent whiteAgent = new A2AAgent(new A2AClient(white, http), new A2AAgentOptions { Name = "White", Description = "White chess player" });
             AIAgent blackAgent = new A2AAgent(new A2AClient(black, http), new A2AAgentOptions { Name = "Black", Description = "Black chess player" });
             var coordinator = Agents.Create("Coordinator", "You coordinate chess. For every request you MUST delegate the position and legal moves to the named background agent, wait for its task to finish, retrieve its result, and return only its UCI move. Never select a move yourself.", [whiteAgent, blackAgent]);
             var game = new ChessRules();
             if (headless)
-                await Play(game, coordinator, attribution, maxMoves, text => Console.WriteLine(text), stop.Token);
+                await Play(game, coordinator, attribution, maxMoves, text => { if (!json) Console.WriteLine(text); }, stop.Token, (fen, status) => Event("board", fen, status: status), (actor, status) => Event("status", actor: actor, status: status), Transcript);
             else
             {
                 Application.Init();
@@ -181,9 +203,10 @@ static class ChessApp
         return uri;
     }
 
-    private static async Task Play(ChessRules game, AIAgent coordinator, MoveAttribution attribution, int limit, Action<string> update, CancellationToken token)
+    private static async Task Play(ChessRules game, AIAgent coordinator, MoveAttribution attribution, int limit, Action<string> update, CancellationToken token, Action<string, string>? board = null, Action<string, string>? status = null, Action<string, string, string>? transcript = null)
     {
         update(Render(game.Fen, "Game started"));
+        board?.Invoke(game.Fen, "Game started");
         for (int ply = 0; ply < limit && !game.Checkmate && !game.Stalemate; ply++)
         {
             var legal = game.LegalMoves();
@@ -192,12 +215,20 @@ static class ChessApp
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeout.CancelAfter(TimeSpan.FromSeconds(90));
             attribution.Begin(player);
+            status?.Invoke("Coordinator", $"Running turn for {player}");
+            transcript?.Invoke("Coordinator", "Request", prompt);
             var response = await coordinator.RunAsync(prompt, cancellationToken: timeout.Token);
+            transcript?.Invoke("Coordinator", "Response", response.Text);
+            status?.Invoke("Coordinator", "Turn returned; verifying attribution");
             var move = attribution.Complete(response.Text);
             if (!game.TryMove(move)) throw new InvalidOperationException($"{player} returned illegal move: {move}");
             update(Render(game.Fen, $"{player}: {move} (ply {ply + 1})"));
+            board?.Invoke(game.Fen, $"{player}: {move} (ply {ply + 1})");
         }
-        update(Render(game.Fen, game.Checkmate ? "Checkmate" : game.Stalemate ? "Stalemate" : "Move limit reached"));
+        var result = game.Checkmate ? "Checkmate" : game.Stalemate ? "Stalemate" : "Move limit reached";
+        update(Render(game.Fen, result));
+        board?.Invoke(game.Fen, result);
+        status?.Invoke("Coordinator", "Game complete");
     }
 
     private static string Render(string fen, string status)

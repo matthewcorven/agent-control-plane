@@ -1,0 +1,92 @@
+@using AGUIWebChat.Client.Models
+@using AGUIWebChat.Client.Formatting
+@using AGUIWebChat.Contracts.Agents
+
+@* Fluent card for a tool invocation: pending while streaming, result when complete. *@
+
+<FluentCard Class="@($"tool-block {StateClass}")">
+    <div class="tool-block-header">
+        <FluentBadge Appearance="@BadgeAppearance" Color="@BadgeColor" Class="tool-block-badge">
+            @(State == ChatBlockState.Pending || State == ChatBlockState.Streaming ? "Running" : "Tool")
+        </FluentBadge>
+        <span class="tool-block-title">@(Title ?? "Tool call")</span>
+        @if (DurationMs.HasValue)
+        {
+            <span class="tool-block-duration">@FormatDuration(DurationMs.Value)</span>
+        }
+    </div>
+
+    @if (Scenario is not null)
+    {
+        <p>@Scenario.Status</p>
+        @if (Scenario.Name == "list_available_models" &&
+            ScenarioToolProjection.Result(Scenario, AgentServerSerializerContext.Default.ModelCatalogResult) is { } catalogue)
+        {
+            <p>@catalogue.TotalCount available models</p>
+            @foreach (var model in catalogue.Models)
+            {
+                <div class="catalogue-entry" data-model="@model.Id">
+                    <strong>@model.DisplayName</strong> <span>@model.ModelId</span>
+                    <span>@model.ProviderName</span>
+                    <span>Tools: @(model.SupportsTools ? "Yes" : "No")</span>
+                    <span>Vision: @(model.SupportsVision ? "Yes" : "No")</span>
+                </div>
+            }
+        }
+        else if (Scenario.Name == "get_model_details" &&
+            ScenarioToolProjection.Result(Scenario, AgentServerSerializerContext.Default.ModelDetailsResult) is { } details)
+        {
+            @if (!details.Found) { <p>Model not found</p> }
+            else
+            {
+                <h3>@details.DisplayName</h3>
+                <p>@details.ModelId - @details.ProviderName</p>
+                <p>Reasoning: @details.ThinkingMode; Tools: @(details.SupportsTools ? "Yes" : "No")</p>
+                <p>Context window: @(details.ContextWindow?.ToString() ?? "Not specified")</p>
+            }
+        }
+    }
+</FluentCard>
+
+@code {
+    [Parameter]
+    public ChatBlockModel? Block { get; set; }
+
+    [Parameter]
+    public ScenarioToolModel? Scenario { get; set; }
+
+    private ChatBlockState State => Scenario is null ? Block?.State ?? ChatBlockState.Pending :
+        Scenario.Status == "Failed" ? ChatBlockState.Failed :
+        Scenario.Result is null ? ChatBlockState.Streaming : ChatBlockState.Complete;
+
+    private string StateClass => State switch
+    {
+        ChatBlockState.Pending => "tool-block-pending",
+        ChatBlockState.Streaming => "tool-block-streaming",
+        ChatBlockState.Failed => "tool-block-failed",
+        _ => "tool-block-complete"
+    };
+
+    private BadgeAppearance BadgeAppearance => State switch
+    {
+        ChatBlockState.Pending => Microsoft.FluentUI.AspNetCore.Components.BadgeAppearance.Filled,
+        ChatBlockState.Streaming => Microsoft.FluentUI.AspNetCore.Components.BadgeAppearance.Filled,
+        ChatBlockState.Failed => Microsoft.FluentUI.AspNetCore.Components.BadgeAppearance.Filled,
+        _ => Microsoft.FluentUI.AspNetCore.Components.BadgeAppearance.Tint
+    };
+
+    private BadgeColor BadgeColor => State switch
+    {
+        ChatBlockState.Pending => Microsoft.FluentUI.AspNetCore.Components.BadgeColor.Brand,
+        ChatBlockState.Streaming => Microsoft.FluentUI.AspNetCore.Components.BadgeColor.Brand,
+        ChatBlockState.Failed => Microsoft.FluentUI.AspNetCore.Components.BadgeColor.Danger,
+        _ => Microsoft.FluentUI.AspNetCore.Components.BadgeColor.Subtle
+    };
+
+    private string? Title => Scenario?.Name ?? Block?.Title;
+
+    private double? DurationMs => Block?.DurationMs;
+
+    private static string FormatDuration(double durationMs) =>
+        durationMs < 1000 ? $"{durationMs:F0} ms" : $"{durationMs / 1000:F1} s";
+}

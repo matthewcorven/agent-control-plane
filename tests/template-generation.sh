@@ -11,6 +11,12 @@ dotnet new local-agent-poc --debug:custom-hive "$work/hive" -o "$work/generated"
 if [ -e "$work/generated/.git" ] || [ -e "$work/generated/.template.config" ]; then
     echo 'Generated output contains template repository metadata' >&2; exit 1
 fi
+if [ ! -f "$work/generated/app/AGUIWebChat.slnx" ] || [ -e "$work/generated/app/node_modules" ] || [ -e "$work/generated/app/test-results" ] || [ -e "$work/generated/app/playwright-report" ]; then
+    echo 'Generated app is missing or contains local test artifacts' >&2; exit 1
+fi
+if [ -e "$work/generated/app/.dotnet" ] || [ -e "$work/generated/app/NuGetScratch" ] || [ -e "$work/generated/app/test-results-local-protocols" ] || find "$work/generated/app" \( -name '*.keychain' -o -name '.fl*' \) -print | grep -q .; then
+    echo 'Generated app contains local tooling state or keychains' >&2; exit 1
+fi
 for source in examples/common.cs examples/mxc-run.cs examples/01-planning-harness.cs examples/02-team-harness.cs examples/03-files-harness.cs examples/04-memory-harness.cs examples/05-skills-harness.cs examples/06-loop-harness.cs examples/07-assistant-harness.cs examples/08-a2a-harness.cs examples/09-mcp-harness.cs examples/10-openai-host-harness.cs; do
     if ! grep -Fq 'http://127.0.0.1:8765/v1' "$work/generated/$source"; then
         echo "Endpoint substitution missing in $source" >&2; exit 1

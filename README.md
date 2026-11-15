@@ -4,6 +4,9 @@ A proof-of-concept .NET template for experimenting with local [Microsoft Agent F
 
 **Experimental, not a secure sandbox.** These examples run as ordinary local processes with your user permissions. The introductory examples perform file operations in application code; the Harness examples opt into agent tools as described below. Approvals and workspace paths are not OS isolation and do not restrict a compromised process, local model server, or malicious dependencies. Do not use with sensitive data or untrusted code. OpenShell is not integrated, and MXC is available only through an experimental opt-in launcher; see [security status](#security-status). This POC does not implement a zero-trust system.
 
+## Why dotnet?
+Because I love it. And because it has everything needed, front to back.
+
 ## Quick start
 
 Install the .NET 11 SDK and start an oMLX server on `127.0.0.1:8001`. Download the model you want beforehand and make sure the server can discover it; substitute its model ID below. NuGet restore needs network access on first run. Audio examples also require compatible speech and transcription models.
@@ -120,8 +123,15 @@ From the generated directory, `dotnet tests/chess-rules.cs` and `dotnet tests/ch
 - OpenShell 0.1.8 provides a standalone macOS CLI artifact, but its gateway and sandbox have not been provisioned or tested here. The [official installation](https://docs.nvidia.com/openshell/about/installation) sets up a gateway service; review its effects before installing. Wiring an oMLX endpoint into a sandbox is unresolved. OpenShell's Windows MXC backend is not a macOS integration.
 - A denied-loopback probe cannot establish broad network or filesystem isolation. Do not treat it as certification.
 
+## AG-UI application
+
+`app/` contains the Fluent Blazor AGUIWebChat application, copied with permission from `matthewcorven/AGUIWebChat` at revision `dd01b2b3a912d11350eab58741a439f0e66cb367`, including selected local changes. Follow [app setup](app/docs/README.md) for the catalogue, providers, and startup instructions. For a database-free, scripted inference smoke test, follow [app E2E setup](app/docs/E2E.md).
+
+The application includes AG-UI chat, text and file workflows, Harness planning, evaluation, ephemeral memory, a bundled instruction-only skill and a synchronous assistant, local speech, and opt-in chess with subprocess A2A workers. Its [delegation workflow](app/README.md#harness-delegation) shows real awaited Harness specialists and their submitted prompts and final responses; it is not A2A/ACP or a background-agent workflow. The [approved browser file workflow](app/docs/FILE-WORKFLOW.md) optionally uses a Harness agent with a single in-memory read tool and fixed local oMLX; file submission and downloads require separate review. A separate [OpenAI-compatible development host](app/docs/OPENAI-HOST-WORKFLOW.md) runs locally. See [audio](app/docs/LOCAL-AUDIO.md) and [chess](app/docs/CHESS.md) for configuration and restrictions. The browser-only OpenRouter workflow sends prompts to an external provider and has not yet been validated with a real account. These POC workflows are not sandboxed or production security boundaries.
+
 ## Repository layout
 
+- `app/` — Fluent Blazor application and AG-UI scenario workflows.
 - `examples/` — file-based agents, shared helpers, chess, and the experimental MXC launcher.
 - `tests/` — template, chess, model integration, and containment probes.
 - `.template.config/` — .NET template configuration and customization parameters.
@@ -137,3 +147,7 @@ Explore [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/
 ## License
 
 [MIT](LICENSE).
+
+### Chess session navigation
+
+The chess page shows a coordinator session and separate White and Black subprocess sessions. Their transcript entries are the observed coordinator prompts/responses and A2A message text sent to and received from each worker, not their internal model or tool traces. Messages are truncated and held only in bounded server memory for the current game; starting another game clears them. The local chess API has no per-user authentication; other local processes can read these transcripts. Runs use an unsandboxed local process and the configured local model; do not use sensitive data. If an A2A envelope has no readable text, no transcript entry is fabricated.

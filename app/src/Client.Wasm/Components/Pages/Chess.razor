@@ -1,0 +1,62 @@
+@page "/chess"
+@using AGUIWebChat.Client.Services.Chess
+@inject ChessClient ChessApi
+@implements IAsyncDisposable
+
+<h1>Chess: coordinator and A2A workers</h1>
+<p>Starts two local worker processes and a coordinator using the fixed local model endpoint. No game runs until Start is pressed. Maximum 20 plies and five minutes; failures stop the game.</p>
+<label>Maximum plies <input type="number" min="1" max="20" @bind="plies" /></label>
+<button @onclick="Start" disabled="@(state?.Running == true)">Start</button>
+<button @onclick="Stop" disabled="@(state?.Running != true)">Stop</button>
+@if (error is not null) { <p role="alert">@error</p> }
+@if (state is not null)
+{
+    <p>@state.BoardStatus</p>
+    <div class="chess-board" role="grid" aria-label="Chess board">
+        @foreach (var square in Squares(state.Fen))
+        {
+            <div class="square @(square.Dark ? "dark" : "light")" role="gridcell" aria-label="@square.Label">@square.Piece</div>
+        }
+    </div>
+    <p>FEN: @state.Fen</p>
+    <nav aria-label="Chess sessions">
+        @foreach (var actor in new[] { "Coordinator", "White", "Black" })
+        {
+            <button @onclick="() => selected = actor" aria-pressed="@(selected == actor)">@actor: @Status(actor)</button>
+        }
+    </nav>
+    <section aria-label="@($"{selected} session")">
+        <h2>@selected session</h2>
+        <p>Status: @Status(selected)</p>
+        <p>Observed message text only; long messages are truncated. Internal model messages are not shown.</p>
+        @if (state.Messages is not null && state.Messages.Any(m => m.Actor == selected))
+        {
+            @foreach (var message in state.Messages.Where(m => m.Actor == selected))
+            {
+                <article><h3>@message.Direction</h3><pre>@message.Text</pre></article>
+            }
+        }
+        else { <p>No observed messages yet.</p> }
+    </section>
+}
+@code {
+    private string selected = "Coordinator";
+    private string Status(string actor) => actor switch { "Coordinator" => state?.Coordinator ?? "Not started", "White" => state?.White ?? "Not started", _ => state?.Black ?? "Not started" };
+    private int plies = 2;
+    private ChessSnapshot? state;
+    private string? error;
+    private readonly CancellationTokenSource stop = new();
+    protected override async Task OnInitializedAsync() { await Refresh(); _ = Poll(); }
+    private async Task Poll() { try { while (!stop.IsCancellationRequested) { await Task.Delay(1000, stop.Token); await InvokeAsync(Refresh); } } catch (OperationCanceledException) { } }
+    private async Task Refresh() { try { state = await ChessApi.GetAsync(); StateHasChanged(); } catch (Exception) { error = "Chess service unavailable."; StateHasChanged(); } }
+    private async Task Start() { try { error = null; await ChessApi.StartAsync(plies); await Refresh(); } catch (Exception) { error = "Could not start: verify chess is enabled, configured, and not already running."; } }
+    private async Task Stop() { try { await ChessApi.StopAsync(); await Refresh(); } catch (Exception) { error = "Could not stop the chess process."; } }
+    private static IEnumerable<(string Piece, string Label, bool Dark)> Squares(string fen)
+    {
+        var glyphs = new Dictionary<char, string> { ['K']="♔", ['Q']="♕", ['R']="♖", ['B']="♗", ['N']="♘", ['P']="♙", ['k']="♚", ['q']="♛", ['r']="♜", ['b']="♝", ['n']="♞", ['p']="♟" };
+        var rows = fen.Split(' ')[0].Split('/');
+        if (rows.Length != 8) yield break;
+        for (var rank = 0; rank < 8; rank++) { var file = 0; foreach (var c in rows[rank]) { var count = char.IsAsciiDigit(c) ? c - '0' : 1; for (var i = 0; i < count && file < 8; i++, file++) yield return (glyphs.GetValueOrDefault(c, ""), $"{(char)('a' + file)}{8-rank}", (rank + file) % 2 == 1); } }
+    }
+    public ValueTask DisposeAsync() { stop.Cancel(); stop.Dispose(); return ValueTask.CompletedTask; }
+}

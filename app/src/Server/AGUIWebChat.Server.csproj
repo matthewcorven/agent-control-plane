@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- OPENAI001: GetResponsesClient() is evaluation-only. It is the only surface that returns
+         reasoning summaries, so the dependency is deliberate; revisit when it ships stable. -->
+    <!-- MAAI001: the keyed, caller-isolated session store is required for MAF approval binding. -->
+    <NoWarn>$(NoWarn);OPENAI001;MAAI001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AG-UI protocol types (RunAgentInput, RunStartedEvent, ReasoningMessageContentEvent).
+         Declared explicitly: the code in Agents/ and Telemetry/ binds these types directly, so
+         they must not be satisfied only transitively via Microsoft.Agents.AI.Hosting.AGUI.AspNetCore. -->
+    <PackageReference Include="AGUI.Abstractions" Version="1.0.0" />
+    <PackageReference Include="AGUI.Server" Version="1.0.0" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Mapster" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.AGUI.AspNetCore" Version="1.23.0-preview.260928.1" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.23.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Harness" Version="1.23.0" />
+    <!-- AsIChatClient over AzureOpenAIClient's ChatClient/ResponsesClient lives here, not in
+         Azure.AI.OpenAI. The Responses surface is still marked evaluation-only upstream. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="11.0.0-rc.2.26504.105" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-rc.2.26504.105">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-rc.2.26504.105" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0-rc.2.26504.105" />
+    <!-- 10.6.0 uses the current Abstractions Outputs API while retaining OpenAI 2.10's
+         ResponsesClient constructor required by Azure.AI.OpenAI 2.9.0-beta.1. -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.6.0" />
+	  <PackageReference Include="OllamaSharp" Version="5.5.0" />
+	  <PackageReference Include="OpenTelemetry" Version="1.19.1" />
+	  <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
+	  <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<Folder Include="Logs\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AGUIWebChat.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Contracts\AGUIWebChat.Contracts.csproj" />
+    <ProjectReference Include="..\Middleware\AGUIWebChat.Middleware.csproj" />
+    <ProjectReference Include="..\ServiceDefaults\AGUIWebChat.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\ProtocolWorkflows\ProtocolWorkflows.csproj" />
+  </ItemGroup>
+	
+</Project>

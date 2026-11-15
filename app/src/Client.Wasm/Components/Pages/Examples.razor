@@ -1,0 +1,140 @@
+@page "/examples"
+@using System.Text
+@using AGUI.Client
+@using AGUIWebChat.Client.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.Extensions.AI
+@inject BrowserAgUiBridge Bridge
+@inject AGUIWebChat.Client.Services.AI.AIModelApiClient ModelApi
+@implements IDisposable
+
+<h1>Text and file examples</h1>
+<p>Run a text task through the AG-UI agent. Selected file contents and your prompt are sent to the selected model provider. Use trusted, non-sensitive files.</p>
+<p>File output is downloaded for your review; this page never writes or appends to an existing file on your behalf.</p>
+<label for="example-mode">Workflow</label>
+<select id="example-mode" @bind="_mode" @bind:after="ClearResult" disabled="@_running">
+    <option value="chat">Chat</option>
+    <option value="summarize">Summarize text</option>
+    <option value="rewrite">Rewrite text</option>
+    <option value="translate">Translate to Spanish</option>
+    <option value="keywords">Extract keywords</option>
+    <option value="read">Summarize a text file</option>
+    <option value="write">Generate a new text file</option>
+    <option value="append">Generate text to append to a file</option>
+</select>
+<label for="example-model">Model</label>
+<select id="example-model" @bind="_modelId" disabled="@_running">
+    <option value="0">Server default</option>
+    @foreach (var model in _models)
+    {
+        <option value="@model.Id">@model.DisplayName</option>
+    }
+</select>
+@if (_mode is "read" or "append")
+{
+    <label for="example-file">Text file (maximum 64 KiB)</label>
+    <InputFile id="example-file" OnChange="LoadFileAsync" accept=".txt,text/plain" disabled="@_running" />
+    @if (_fileName is not null) { <p>Selected: @_fileName</p> }
+}
+<FluentTextArea Label="Text or instruction" @bind-Value="_input" Rows="5" Disabled="@_running" />
+<FluentButton OnClick="RunAsync" Disabled="@_running">@(_running ? "Running…" : "Run")</FluentButton>
+@if (_error is not null) { <p role="alert">@_error</p> }
+@if (_result.Length > 0)
+{
+    <h2>Result</h2>
+    <pre data-testid="example-result" style="white-space:pre-wrap">@_result</pre>
+    @if (!_running && _mode is "write" or "append")
+    {
+        <a href="@DownloadUri" download="agent-output.txt">Download result as text</a>
+    }
+}
+
+@code {
+    private const int FileLimit = 64 * 1024;
+    private string _mode = "chat";
+    private int _modelId;
+    private string _input = "";
+    private string _result = "";
+    private string? _fileName;
+    private string? _fileText;
+    private string? _error;
+    private bool _running;
+    private readonly CancellationTokenSource _lifetime = new();
+    private IReadOnlyList<AGUIWebChat.Contracts.AI.Models.AIModelEditModel> _models = [];
+    private string DownloadUri => "data:text/plain;charset=utf-8;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(_mode == "append" ? _fileText + _result : _result));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _models = await ModelApi.GetModelsAsync(enabledOnly: true); }
+        catch (HttpRequestException) { _error = "Model catalogue unavailable; server default will be used."; }
+    }
+
+    private void ClearResult() { _result = ""; _error = null; }
+
+    private async Task LoadFileAsync(InputFileChangeEventArgs args)
+    {
+        ClearResult();
+        _fileName = null; _fileText = null;
+        try
+        {
+            await using var stream = args.File.OpenReadStream(FileLimit, _lifetime.Token);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            _fileText = await reader.ReadToEndAsync(_lifetime.Token);
+            _fileName = args.File.Name;
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException)
+        {
+            _error = "Could not read the selected file. Choose a text file under 64 KiB.";
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        if (_running) return;
+        _error = null; _result = "";
+        if (_mode is "read" or "append" && _fileText is null)
+        {
+            _error = "Select a text file first."; return;
+        }
+        if (string.IsNullOrWhiteSpace(_input) && _mode != "read")
+        {
+            _error = "Enter text or an instruction first."; return;
+        }
+        string task = _mode switch
+        {
+            "summarize" => "Summarize the following text:",
+            "rewrite" => "Rewrite the following text clearly:",
+            "translate" => "Translate the following text to Spanish:",
+            "keywords" => "Extract keywords from the following text:",
+            "read" => "Summarize the following file:",
+            "write" => "Write the requested text, returning only the file contents:",
+            "append" => "Write the requested addition, returning only the text to append:",
+            _ => "Respond to the following:"
+        };
+        string prompt = $"{task}\n{_input}" + (_mode is "read" or "append" ? $"\n\nFile contents:\n{_fileText}" : "");
+        _running = true;
+        try
+        {
+            var transport = new ScenarioAgUiTransport(Bridge, "/ag-ui")
+            {
+                Prepare = request =>
+                {
+                    request.State = System.Text.Json.JsonSerializer.SerializeToElement(
+                        _modelId > 0 ? new Dictionary<string, int> { ["modelId"] = _modelId } : new Dictionary<string, int>());
+                    return Task.CompletedTask;
+                }
+            };
+            using var client = new AGUIChatClient(new AGUIChatClientOptions { Transport = transport });
+            await foreach (var update in client.GetStreamingResponseAsync(prompt, cancellationToken: _lifetime.Token))
+            {
+                _result += update.Text;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception) { _result = ""; _error = "The agent request failed. Check the server and model configuration."; }
+        finally { _running = false; }
+    }
+
+    public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
+}

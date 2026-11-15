@@ -1,0 +1,62 @@
+﻿using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.AspNetCore.Http.Connections;
+
+namespace AGUIWebChat.Client.Services
+{
+    public sealed class TelemetryService : IAsyncDisposable
+    {
+        private readonly HubConnection _hubConnection;
+        public string Channel { get; } = Guid.NewGuid().ToString("N");
+
+        public event Action<ReasoningTelemetryDto>? ReasoningCompleted;
+
+        public event Action<LlmTelemetryDto>? LlmMetricsCompleted;
+
+        public TelemetryService(string telemetryUrl)
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(telemetryUrl + "?channel=" + Channel, options =>
+                {
+                    if (OperatingSystem.IsBrowser())
+                    {
+                        options.Transports = HttpTransportType.WebSockets;
+                        options.SkipNegotiation = true;
+                    }
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<ReasoningTelemetryDto>("ReasoningCompleted",
+                telemetry =>
+                {
+                    ReasoningCompleted?.Invoke(telemetry);
+                });
+
+            _hubConnection.On<LlmTelemetryDto>("LlmMetricsCompleted",
+                telemetry =>
+                {
+                    LlmMetricsCompleted?.Invoke(telemetry);
+                });
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken = default)
+        {
+            if (_hubConnection.State == HubConnectionState.Disconnected)
+            {
+                await _hubConnection.StartAsync(cancellationToken);
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+
+    public sealed class TelemetryTestMessage
+    {
+        public string Message { get; set; } = string.Empty;
+
+        public DateTimeOffset Timestamp { get; set; }
+    }
+}
