@@ -5,6 +5,9 @@
   "name": "Local agent examples (POC)",
   "shortName": "local-agent-poc",
   "sourceName": "LocalAgentPoc",
+  "sources": [
+    { "exclude": [".git/**", ".template.config/**", "**/[Bb]in/**", "**/[Oo]bj/**", "**/*.filelist", "**/*.user", "**/*.lock.json"] }
+  ],
   "symbols": {
     "chatModel": { "type": "parameter", "datatype": "string", "defaultValue": "Qwen3.8-27B-oQ4e-mtp", "replaces": "Qwen3.8-27B-oQ4e-mtp", "description": "Local oMLX chat model ID" },
     "speechModel": { "type": "parameter", "datatype": "string", "defaultValue": "Ming-3.0-tts-tiny-4bit", "replaces": "Ming-3.0-tts-tiny-4bit", "description": "Local oMLX speech model ID" },
