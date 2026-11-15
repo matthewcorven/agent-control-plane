@@ -7,9 +7,9 @@
 Requires .NET 11 SDK and an oMLX server listening on `127.0.0.1:8001`. Model IDs below must be installed in that server; pick equivalent compatible models if not. NuGet restore needs network access on first run.
 
 ```sh
-git clone https://github.com/matthewcorven/agent-template-poc.git
+git clone https://github.com/matthewcorven/the-droids-youre-looking-for.git
 # A local installation of the .NET template; no globally installed MXC is needed.
-dotnet new install ./agent-template-poc
+dotnet new install ./the-droids-youre-looking-for
 dotnet new local-agent-poc -o my-agent --chatModel Qwen3.8-Flash-Next-oQ4e-mtp
 cd my-agent
 printf 'Say hello.\n' | dotnet examples/01-hello-world-chat-stdio.cs
