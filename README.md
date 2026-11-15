@@ -1,10 +1,12 @@
-# Local agent template — proof of concept
+# The Droids You're Looking For
+
+A proof-of-concept .NET template for experimenting with local [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/) agents and [oMLX](https://github.com/jundot/omlx). Generate a project with configurable model IDs, run small file-based C# examples, or watch two agents play chess through A2A.
 
 **Experimental, not a secure sandbox.** These examples run as ordinary local processes with your user permissions. The agent has no registered tools; file operations are performed by the example code on paths you explicitly provide. This does not restrict a compromised process, local model server, or malicious dependencies. Do not use with sensitive data or untrusted code. OpenShell is not integrated, and MXC is available only through an experimental opt-in launcher; see [security status](#security-status). This POC does not implement a zero-trust system.
 
-## Start
+## Quick start
 
-Requires .NET 11 SDK and an oMLX server listening on `127.0.0.1:8001`. Model IDs below must be installed in that server; pick equivalent compatible models if not. NuGet restore needs network access on first run.
+Install the .NET 11 SDK and start an oMLX server on `127.0.0.1:8001`. Download the model you want beforehand and make sure the server can discover it; substitute its model ID below. NuGet restore needs network access on first run. Audio examples also require compatible speech and transcription models.
 
 ```sh
 git clone https://github.com/matthewcorven/the-droids-youre-looking-for.git
@@ -35,7 +37,7 @@ Run `dotnet new local-agent-poc --help` for `--endpoint`, `--chatModel`, `--smal
 
 Run each with `dotnet examples/<name>`; for stdin use `printf 'How do I look?\n' | dotnet examples/03-file-tts-by-stdin.cs reply.wav`. Audio examples overwrite the specified output file. They send content to the local oMLX server; verify its model support and privacy configuration before use.
 
-The small examples default to the preinstalled `Qwen2.5-0.5B-Instruct-4bit` model, configurable with `--smallModel`. The oMLX server must discover that model before use. These examples use Apple MLX; they do **not** establish CPU-only execution, and MLX does not provide a Google TPU backend. Small-model outputs are probabilistic and should be checked: the 0.5B model produced an inaccurate translation during testing. The experimental MXC launcher does not support these examples.
+The small examples default to `Qwen2.5-0.5B-Instruct-4bit`, configurable with `--smallModel`; you must download it separately. The oMLX server must discover that model before use. These examples use Apple MLX; they do **not** establish CPU-only execution, and MLX does not provide a Google TPU backend. Small-model outputs are probabilistic and should be checked: the 0.5B model produced an inaccurate translation during testing. The experimental MXC launcher does not support these examples.
 
 `sh tests/small-model-integration.sh [endpoint] [model]` generates a template and checks that all four examples return responses; it does not validate their accuracy.
 
@@ -64,4 +66,20 @@ From the generated directory, `dotnet tests/chess-rules.cs` and `dotnet tests/ch
 - OpenShell 0.1.8 provides a standalone macOS CLI artifact, but its gateway and sandbox have not been provisioned or tested here. The [official installation](https://docs.nvidia.com/openshell/about/installation) sets up a gateway service; review its effects before installing. Wiring an oMLX endpoint into a sandbox is unresolved. OpenShell's Windows MXC backend is not a macOS integration.
 - A denied-loopback probe cannot establish broad network or filesystem isolation. Do not treat it as certification.
 
+## Repository layout
+
+- `examples/` — file-based agents, shared helpers, chess, and the experimental MXC launcher.
+- `tests/` — template, chess, model integration, and containment probes.
+- `.template.config/` — .NET template configuration and customization parameters.
+
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, and security guidance. Model-generated output and containment probes require careful review; please describe the environment and limitations of your results.
+
+## Learn more
+
 Explore [Microsoft Agent Framework](https://learn.microsoft.com/agent-framework/), [MXC](https://github.com/microsoft/mxc), [OpenShell](https://docs.nvidia.com/openshell/), and [corven-agents](https://github.com/matthewcorven/corven-agents) for agent tools, approvals, and safety patterns. This standalone experiment is not an implementation of the corven-agents hub.
+
+## License
+
+[MIT](LICENSE).
